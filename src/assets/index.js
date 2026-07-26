@@ -6,6 +6,7 @@ const characterFullModules = import.meta.glob('./characters_full/*.png', { eager
 const equipmentModules = import.meta.glob('./equipment/*.png', { eager: true, import: 'default' })
 const boardModules = import.meta.glob('./board/*.png', { eager: true, import: 'default' })
 const phaseModules = import.meta.glob('./phases/*.png', { eager: true, import: 'default' })
+const tableModules = import.meta.glob('./table/*.png', { eager: true, import: 'default' })
 
 function toIdMap(modules) {
   const map = {}
@@ -21,3 +22,4 @@ export const CHARACTER_FULL_IMAGES = toIdMap(characterFullModules) // es. CHARAC
 export const EQUIPMENT_IMAGES = toIdMap(equipmentModules) // es. EQUIPMENT_IMAGES.durindana
 export const BOARD_IMAGES = toIdMap(boardModules) // es. BOARD_IMAGES.board68_cristiana_3
 export const PHASE_IMAGES = toIdMap(phaseModules) // es. PHASE_IMAGES.chiamata_alle_armi, PHASE_IMAGES.vittoria_cristiana
+export const TABLE_IMAGES = toIdMap(tableModules) // TABLE_IMAGES.tavolo (sfondo della vista circolare del tavolo, opzionale)

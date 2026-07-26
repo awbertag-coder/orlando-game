@@ -33,6 +33,7 @@ export default function OnlineApp() {
   const [supervisorState, setSupervisorState] = useState(null)
   const [supervisorPassword, setSupervisorPassword] = useState('')
   const [supervisorError, setSupervisorError] = useState(null)
+  const [openRooms, setOpenRooms] = useState([])
 
   const [name, setName] = useState(() => localStorage.getItem('orlando_name') || '')
   const [roomCode, setRoomCode] = useState(() => localStorage.getItem('orlando_room') || '')
@@ -55,6 +56,7 @@ export default function OnlineApp() {
     socket.on('supervisorJoined', () => setSupervising(true))
     socket.on('supervisorJoinError', (msg) => setSupervisorError(msg))
     socket.on('supervisorState', (payload) => setSupervisorState(payload))
+    socket.on('openRooms', (payload) => setOpenRooms(payload))
 
     const savedToken = localStorage.getItem('orlando_token')
     const savedRoom = localStorage.getItem('orlando_room')
@@ -73,6 +75,7 @@ export default function OnlineApp() {
       socket.off('supervisorJoined')
       socket.off('supervisorJoinError')
       socket.off('supervisorState')
+      socket.off('openRooms')
     }
   }, [socket])
 
@@ -96,6 +99,7 @@ export default function OnlineApp() {
         joinError={joinError}
         supervisorPassword={supervisorPassword} setSupervisorPassword={setSupervisorPassword}
         supervisorError={supervisorError}
+        openRooms={openRooms}
         onJoin={() => socket.emit('join', { roomCode: roomCode.trim().toUpperCase(), name: name.trim(), playerCount, useEquipment })}
         onSupervise={() => {
           const rc = roomCode.trim().toUpperCase()
@@ -108,7 +112,20 @@ export default function OnlineApp() {
   }
 
   if (!state) {
-    return <LobbyScreen lobby={lobby} roomCode={roomCode} />
+    return (
+      <LobbyScreen
+        lobby={lobby}
+        roomCode={roomCode}
+        onLeave={() => {
+          socket.emit('leaveRoom')
+          localStorage.removeItem('orlando_token')
+          localStorage.removeItem('orlando_room')
+          setJoined(false)
+          setLobby(null)
+          setRoomCode('')
+        }}
+      />
+    )
   }
 
   return <GameScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={() => setSecretInfo(null)} />
@@ -131,7 +148,7 @@ function SupervisorScreen({ state, roomCode }) {
   )
 }
 
-function JoinScreen({ name, setName, roomCode, setRoomCode, playerCount, setPlayerCount, useEquipment, setUseEquipment, joinError, supervisorPassword, setSupervisorPassword, supervisorError, onJoin, onSupervise }) {
+function JoinScreen({ name, setName, roomCode, setRoomCode, playerCount, setPlayerCount, useEquipment, setUseEquipment, joinError, supervisorPassword, setSupervisorPassword, supervisorError, openRooms, onJoin, onSupervise }) {
   const canJoin = name.trim().length > 0 && roomCode.trim().length > 0
   return (
     <div className="card">
@@ -140,6 +157,26 @@ function JoinScreen({ name, setName, roomCode, setRoomCode, playerCount, setPlay
       <Divider />
       <input type="text" placeholder="Il tuo nome" value={name} onChange={e => setName(e.target.value)} />
       <input type="text" placeholder="Codice stanza (es. CROCIATA)" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} />
+
+      {openRooms.length > 0 && (
+        <div style={{ margin: '10px 0' }}>
+          <label style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>Stanze aperte in questo momento</label>
+          <div className="player-list" style={{ marginTop: 6 }}>
+            {openRooms.map(r => (
+              <button
+                key={r.roomCode}
+                type="button"
+                className={roomCode === r.roomCode ? '' : 'secondary'}
+                style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}
+                onClick={() => setRoomCode(r.roomCode)}
+              >
+                <span>{r.roomCode}</span>
+                <span>{r.playerCount}/{r.requiredPlayers} &middot; {r.useEquipment ? 'esperti' : 'novizi'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ margin: '10px 0' }}>
         <label style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>Numero di giocatori (usato solo se sei tu a creare la stanza)</label>
         <select value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} style={{ width: '100%', padding: '10px 12px', fontFamily: 'inherit', marginTop: 6 }}>
@@ -174,8 +211,15 @@ function JoinScreen({ name, setName, roomCode, setRoomCode, playerCount, setPlay
   )
 }
 
-function LobbyScreen({ lobby, roomCode }) {
-  if (!lobby) return <div className="card"><p>Connessione alla stanza&hellip;</p></div>
+function LobbyScreen({ lobby, roomCode, onLeave }) {
+  if (!lobby) {
+    return (
+      <div className="card">
+        <p>Connessione alla stanza&hellip;</p>
+        <button className="secondary" onClick={onLeave}>Annulla</button>
+      </div>
+    )
+  }
   return (
     <div className="card">
       <div className="eyebrow">Stanza {roomCode}</div>
@@ -189,6 +233,7 @@ function LobbyScreen({ lobby, roomCode }) {
           </div>
         ))}
       </div>
+      <button className="secondary" style={{ marginTop: 14 }} onClick={onLeave}>Lascia il tavolo</button>
     </div>
   )
 }

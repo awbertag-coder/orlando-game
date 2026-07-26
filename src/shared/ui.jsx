@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { CHARACTER_IMAGES, CHARACTER_FULL_IMAGES, BOARD_IMAGES, PHASE_IMAGES } from '../assets/index.js'
+import { CHARACTER_IMAGES, CHARACTER_FULL_IMAGES, BOARD_IMAGES, PHASE_IMAGES, TABLE_IMAGES } from '../assets/index.js'
 import { playPhaseAudio } from './phaseAudio.js'
 
 // Metadati delle schermate di transizione tra le fasi (immagine, testo, audio opzionale).
@@ -339,13 +339,22 @@ export const CHARACTER_OPTIONS = [
 // (utile online, dove sai chi sei; in hotseat/monitoraggio si puo' omettere).
 export function TableView({ state, viewerId = null }) {
   const n = state.players.length
+  const tableImage = TABLE_IMAGES.tavolo
   return (
     <div style={{ position: 'relative', width: '100%', paddingBottom: '75%', margin: '10px 0 20px' }}>
-      <div style={{
-        position: 'absolute', inset: '12%', borderRadius: '50%',
-        background: 'radial-gradient(ellipse at center, #8a6a3a 0%, #6b4f28 70%, #4a3820 100%)',
-        border: '4px solid var(--ink)', boxShadow: 'inset 0 0 30px rgba(0,0,0,0.5)'
-      }} />
+      {tableImage ? (
+        <img
+          src={tableImage}
+          alt="Tavolo"
+          style={{ position: 'absolute', inset: '4%', width: '92%', height: '92%', objectFit: 'contain' }}
+        />
+      ) : (
+        <div style={{
+          position: 'absolute', inset: '12%', borderRadius: '50%',
+          background: 'radial-gradient(ellipse at center, #8a6a3a 0%, #6b4f28 70%, #4a3820 100%)',
+          border: '4px solid var(--ink)', boxShadow: 'inset 0 0 30px rgba(0,0,0,0.5)'
+        }} />
+      )}
       {state.players.map((p, i) => {
         const angle = (i / n) * 2 * Math.PI - Math.PI / 2
         const cx = 50 + 46 * Math.cos(angle)

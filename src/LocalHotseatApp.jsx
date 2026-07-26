@@ -4,6 +4,11 @@ import { EQUIPMENT_BY_ID } from './engine/equipment.js'
 import { CHARACTER_IMAGES, EQUIPMENT_IMAGES, BOARD_IMAGES } from './assets/index.js'
 import { Divider, FactionBadge, IdentityBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate } from './shared/ui.jsx'
 
+// Stessa password della modalita' amministratore online. Qui e' per forza lato client
+// (l'hotseat non ha un server): basta a scoraggiare un'occhiata rapida di un giocatore
+// curioso, non e' una vera barriera di sicurezza (chi guarda nel codice la trova).
+const SUPERVISOR_PASSWORD = 'Admin!!!'
+
 // Schermata "passa il dispositivo": nasconde il contenuto finche' non si preme "Mostra",
 // e si richiude automaticamente ogni volta che cambia il giocatore di turno (key).
 function PassGate({ playerName, children }) {
@@ -791,8 +796,17 @@ export default function LocalHotseatApp() {
           Mostra tavolo e sospetti (privato per ciascun giocatore, dentro il proprio turno)
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
-          <input type="checkbox" checked={showSupervisor} onChange={e => setShowSupervisor(e.target.checked)} />
-          Modalita' supervisore (vedi tutto, per test)
+          <input type="checkbox" checked={showSupervisor} onChange={e => {
+            if (e.target.checked) {
+              const pw = window.prompt('Password amministratore:')
+              if (pw === null) return
+              if (pw === SUPERVISOR_PASSWORD) setShowSupervisor(true)
+              else window.alert('Password amministratore errata.')
+            } else {
+              setShowSupervisor(false)
+            }
+          }} />
+          Modalita' supervisore (vedi tutto, per test) &mdash; richiede password amministratore
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
           <input type="checkbox" checked={showBoard} onChange={e => setShowBoard(e.target.checked)} />

@@ -33,6 +33,26 @@ function lobbyPayload(room) {
 
 function broadcastLobby(roomCode) {
   io.to(roomCode).emit('lobby', lobbyPayload(rooms[roomCode]))
+  broadcastOpenRooms()
+}
+
+// Elenco pubblico delle stanze ancora in attesa di giocatori (partita non iniziata),
+// mandato a TUTTI i client connessi (anche a chi non e' ancora entrato in nessuna stanza),
+// cosi' chi apre il gioco puo' vedere/scegliere una stanza aperta invece di dover
+// conoscere gia' un codice.
+function getOpenRoomsList() {
+  return Object.entries(rooms)
+    .filter(([, r]) => !r.game && r.players.length > 0)
+    .map(([code, r]) => ({
+      roomCode: code,
+      playerCount: r.players.length,
+      requiredPlayers: r.requiredPlayers,
+      useEquipment: r.useEquipment
+    }))
+}
+
+function broadcastOpenRooms() {
+  io.emit('openRooms', getOpenRoomsList())
 }
 
 function broadcastState(roomCode) {
@@ -130,6 +150,8 @@ function startGameIfReady(roomCode) {
 }
 
 io.on('connection', (socket) => {
+  socket.emit('openRooms', getOpenRoomsList())
+
   socket.on('join', ({ roomCode, name, token, playerCount, useEquipment }) => {
     if (!roomCode || !name) return
     roomCode = roomCode.trim().toUpperCase()
@@ -295,6 +317,35 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Errore azione', type, err)
     }
+  })
+
+  // Lascia il tavolo: permesso solo prima che la partita sia iniziata (a partita in corso
+  // il posto non puo' essere richiuso senza rompere il gioco per gli altri; in quel caso
+  // resta solo la disconnessione/riconnessione). Libera il posto e aggiorna l'elenco stanze.
+  socket.on('leaveRoom', () => {
+    const roomCode = socket.data.roomCode
+    if (!roomCode || !rooms[roomCode]) return
+    const room = rooms[roomCode]
+
+    if (socket.data.isSupervisor) {
+      room.supervisors = room.supervisors.filter(id => id !== socket.id)
+    } else if (!room.game) {
+      const token = socket.data.token
+      room.players = room.players.filter(p => p.token !== token)
+      broadcastLobby(roomCode)
+    } else {
+      return // partita gia' iniziata: non si puo' lasciare da qui
+    }
+
+    socket.leave(roomCode)
+    socket.data.roomCode = null
+    socket.data.token = null
+    socket.data.isSupervisor = false
+
+    if (room.players.length === 0 && room.supervisors.length === 0 && !room.game) {
+      delete rooms[roomCode]
+    }
+    broadcastOpenRooms()
   })
 
   socket.on('disconnect', () => {
