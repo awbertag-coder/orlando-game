@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { EQUIPMENT_BY_ID } from './engine/equipment.js'
 import { EQUIPMENT_IMAGES } from './assets/index.js'
-import { Divider, FactionBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, TableView, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate } from './shared/ui.jsx'
+import { Divider, FactionBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, TableView, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton } from './shared/ui.jsx'
 
 function getServerUrl() {
   // In produzione (Render, Netlify, ecc.) frontend e backend vivono su domini diversi:
@@ -249,6 +249,59 @@ function VoiceLinkPanel({ voiceLink, onSetVoiceLink, compact }) {
   )
 }
 
+// Il "Consiglio dei cavalieri" lato online: pannello persistente durante la Fase 2,
+// non una fase a se'. Qui l'autore del commento e' implicito (sei tu, un dispositivo
+// a testa), a differenza dell'hotseat dove va scelto da un elenco.
+function CouncilPanel({ messages, readyIds, myId, totalPlayers, onSend, onSetReady }) {
+  const [draft, setDraft] = useState('')
+  const amReady = readyIds.includes(myId)
+  return (
+    <div className="card" style={{ margin: '10px 0' }}>
+      <div className="eyebrow">Consiglio dei cavalieri</div>
+      <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em', marginTop: 4 }}>Commenta le carte giocate finora, o dai un consiglio al possessore di Durindana per la scelta dei partecipanti.</p>
+      {messages.length > 0 && (
+        <div className="player-list" style={{ margin: '10px 0' }}>
+          {messages.map((m, i) => (
+            <div key={i} className="card" style={{ margin: 0, padding: '8px 12px' }}>
+              <strong>{m.name}:</strong> {m.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Scrivi un commento..."
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          maxLength={300}
+          style={{ flex: 1, minWidth: 160 }}
+        />
+        <button
+          className="secondary"
+          disabled={!draft.trim()}
+          onClick={() => { onSend(draft.trim()); setDraft('') }}
+        >
+          Invia
+        </button>
+      </div>
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => onSetReady(!amReady)}
+          style={{
+            background: amReady ? 'var(--saracen)' : 'var(--crimson)',
+            color: '#fff', border: 'none'
+          }}
+        >
+          {amReady ? '\u2713 Pronto per la Chiamata alle armi' : 'Ho finito: sono pronto'}
+        </button>
+        <span style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>{readyIds.length}/{totalPlayers} pronti</span>
+      </div>
+    </div>
+  )
+}
+
 function LobbyScreen({ lobby, roomCode, onLeave, onSetVoiceLink }) {
   if (!lobby) {
     return (
@@ -341,6 +394,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
           {state.winner === 'isabella' ? 'Vittoria di Isabella, in solitaria!' : `Vittoria ${state.winner === 'cristiana' ? 'Cristiana' : 'Saracena'}!`}
         </h1>
         <BoardView game={state} />
+        <PhaseRulesButton phaseKey={`vittoria_${state.winner}`} />
       </div>
     )
   }
@@ -410,6 +464,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
   return (
     <div>
       {content}
+      <PhaseRulesButton phaseKey={transitionKey} />
       <HoldToPeekCharacter player={me} />
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: 'var(--ink-soft)' }}>
         <input type="checkbox" checked={showTable} onChange={e => setShowTable(e.target.checked)} />
@@ -422,6 +477,16 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
       {showTable && <SuspicionBoard state={state} viewerId={state.myId} />}
       {showBoard && <BoardPowersPanel game={state} />}
       <VoiceLinkPanel voiceLink={state.voiceLink} onSetVoiceLink={onSetVoiceLink} compact />
+      {(state.phase === 'phase2-instant' || state.phase === 'phase2-voluntary') && (
+        <CouncilPanel
+          messages={state.councilMessages}
+          readyIds={state.councilReady}
+          myId={state.myId}
+          totalPlayers={state.players.length}
+          onSend={text => act('addCouncilMessage', { text })}
+          onSetReady={ready => act('setCouncilReady', { ready })}
+        />
+      )}
       <LogPanel log={state.log} />
     </div>
   )

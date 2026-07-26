@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import * as engine from './engine/gameEngine.js'
 import { EQUIPMENT_BY_ID } from './engine/equipment.js'
 import { CHARACTER_IMAGES, EQUIPMENT_IMAGES, BOARD_IMAGES } from './assets/index.js'
-import { Divider, FactionBadge, IdentityBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate } from './shared/ui.jsx'
+import { Divider, FactionBadge, IdentityBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton } from './shared/ui.jsx'
 
 // Stessa password della modalita' amministratore online. Qui e' per forza lato client
 // (l'hotseat non ha un server): basta a scoraggiare un'occhiata rapida di un giocatore
@@ -244,6 +244,52 @@ function VoluntaryCardFlow({ game, update, showTable }) {
 }
 
 // --- Fase 3: selezione partecipanti da parte del possessore di Durindana ---
+
+// Il "Consiglio dei cavalieri": pannello persistente, non una fase a se' -- resta visibile
+// durante tutta la Fase 2 (istantanee + volontarie), cosi' chiunque puo' commentare le
+// carte via via che vengono giocate, senza fermare il giro per farlo.
+function CouncilPanel({ game, update }) {
+  const [draft, setDraft] = useState('')
+  const [authorId, setAuthorId] = useState(game.players[0]?.id || '')
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="eyebrow">Consiglio dei cavalieri</div>
+      <p style={{ color: 'var(--ink-soft)', fontSize: '0.9em', marginTop: 4 }}>Commenta le carte giocate finora, o dai un consiglio al possessore di Durindana per la scelta dei partecipanti.</p>
+      {game.councilMessages.length > 0 && (
+        <div className="player-list" style={{ margin: '10px 0' }}>
+          {game.councilMessages.map((m, i) => (
+            <div key={i} className="card" style={{ margin: 0, padding: '8px 12px' }}>
+              <strong>{m.name}:</strong> {m.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <select value={authorId} onChange={e => setAuthorId(e.target.value)}>
+          {game.players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <input
+          type="text"
+          placeholder="Scrivi un commento..."
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          maxLength={300}
+          style={{ flex: 1, minWidth: 160 }}
+        />
+        <button
+          className="secondary"
+          disabled={!draft.trim()}
+          onClick={() => {
+            update(s => engine.addCouncilMessage(s, authorId, draft))
+            setDraft('')
+          }}
+        >
+          Invia
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function ParticipantSelectFlow({ game, update, showTable, onDone }) {
   const durindanaHolder = game.players.find(p => p.hasDurindana)
@@ -626,6 +672,7 @@ function GameOverScreen({ game }) {
         {game.winner === 'isabella' ? 'Vittoria di Isabella, in solitaria!' : `Vittoria ${game.winner === 'cristiana' ? 'Cristiana' : 'Saracena'}!`}
       </h1>
       <BoardView game={game} />
+      <PhaseRulesButton phaseKey={`vittoria_${game.winner}`} />
     </div>
   )
 }
@@ -790,6 +837,7 @@ export default function LocalHotseatApp() {
     <div className="app-shell">
       <div className="eyebrow">Orlando alle Crociate &mdash; prototipo hotseat</div>
       {content}
+      <PhaseRulesButton phaseKey={transitionKey} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '14px 0' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
           <input type="checkbox" checked={showTable} onChange={e => setShowTable(e.target.checked)} />
@@ -815,6 +863,7 @@ export default function LocalHotseatApp() {
       </div>
       {showSupervisor && <FullPlayersTable players={game.players} equipmentById={EQUIPMENT_BY_ID} />}
       {showBoard && <BoardPowersPanel game={game} />}
+      {(game.phase === 'phase2-instant' || game.phase === 'phase2-voluntary') && <CouncilPanel game={game} update={update} />}
       <LogPanel log={game.log} />
     </div>
   )

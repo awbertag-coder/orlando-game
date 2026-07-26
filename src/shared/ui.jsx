@@ -6,15 +6,42 @@ import { playPhaseAudio } from './phaseAudio.js'
 // La chiave e' quella che l'app calcola in base a game.phase/stage (vedi transitionKeyFor* in
 // LocalHotseatApp.jsx / OnlineApp.jsx).
 export const PHASE_TRANSITIONS = {
-  assegnazione: { image: 'assegnazione_fazioni', eyebrow: 'Assegnazione Fazioni', title: 'Le fazioni sono pronte' },
-  rivelazione: { image: 'rivelazione', eyebrow: 'Fase 1 \u2014 Rivelazione', title: 'Uno scambio silenzioso' },
-  alavventura: { image: 'alavventura', eyebrow: "Fase 2 \u2014 All'avventura", title: 'Ogni cavaliere gioca la propria carta' },
-  chiamata: { image: 'chiamata_alle_armi', eyebrow: 'Fase 3 \u2014 Chiamata alle armi', title: "Durindana sceglie chi andra' in battaglia" },
-  scontro: { image: 'scontro', eyebrow: 'Fase 4 \u2014 Scontro', title: 'Le lame si incrociano', audio: 'clash' },
-  risoluzione: { image: 'risoluzione', eyebrow: 'Fase 5 \u2014 Risoluzione', title: "L'araldo proclama chi ha vinto", audio: 'fanfare' },
-  vittoria_cristiana: { image: 'vittoria_cristiana', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'La fazione Cristiana ha vinto', audio: 'fanfareGrand' },
-  vittoria_saracena: { image: 'vittoria_saracena', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'La fazione Saracena ha vinto', audio: 'fanfareGrand' },
-  vittoria_isabella: { image: 'vittoria_isabella', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'Isabella vince da sola, in solitaria', audio: 'fanfareSolo' },
+  assegnazione: {
+    image: 'assegnazione_fazioni', eyebrow: 'Assegnazione Fazioni', title: 'Le fazioni sono pronte',
+    rules: "A ciascun giocatore viene assegnato in segreto un personaggio, di fazione Cristiana o Saracena (tranne Isabella, che non ne ha nessuna). Uno dei giocatori riceve anche Durindana, la spada che ogni round decidera' chi va in battaglia. Nessuno conosce l'identita' degli altri, a meno che il proprio personaggio non la riveli espressamente."
+  },
+  rivelazione: {
+    image: 'rivelazione', eyebrow: 'Fase 1 \u2014 Rivelazione', title: 'Uno scambio silenzioso',
+    rules: "Si gioca solo con 8 o piu' giocatori. Nessuna scelta da fare: Orlando e Agramante vedono l'elenco dei propri alleati di fazione; Angelica scopre chi e' Medoro; Ruggero scopre chi e' Bradamante."
+  },
+  alavventura: {
+    image: 'alavventura', eyebrow: "Fase 2 \u2014 All'avventura", title: 'Ogni cavaliere gioca la propria carta',
+    rules: "Si giocano le carte equipaggiamento, in giro di tavolo a partire da Durindana: prima le istantanee (si rivelano da sole), poi le volontarie (puoi scegliere se giocarle o tenerle coperte). Se qualcuno ti elimina dalla battaglia e hai Parata o Orrilo, puoi rispondere subito, anche fuori dal tuo turno. Chi possiede Il Palazzo di Atlante puo' ridirigere un'eliminazione appena avvenuta su un bersaglio diverso."
+  },
+  chiamata: {
+    image: 'chiamata_alle_armi', eyebrow: 'Fase 3 \u2014 Chiamata alle armi', title: "Durindana sceglie chi andra' in battaglia",
+    rules: "Il possessore di Durindana sceglie chi scende in battaglia: base 2 partecipanti, modificata da Olifante (+1) e Argalia (-1). Non puo' scegliere se stesso, tranne se e' Orlando o Agramante, che possono aggiungersi di nascosto come partecipanti in piu'."
+  },
+  scontro: {
+    image: 'scontro', eyebrow: 'Fase 4 \u2014 Scontro', title: 'Le lame si incrociano', audio: 'clash',
+    rules: "Ogni partecipante rivela in privato quale tessera favore vuole giocare, ed eventuali carte da battaglia possedute vengono rivelate ora. Un Fantasma presente puo' bloccare un partecipante a sua scelta, azzerandone il favore senza vederlo."
+  },
+  risoluzione: {
+    image: 'risoluzione', eyebrow: 'Fase 5 \u2014 Risoluzione', title: "L'araldo proclama chi ha vinto", audio: 'fanfare',
+    rules: "L'Ariosto somma i favori di ciascuna fazione e decreta il vincitore di questo assalto, senza mai rivelare i numeri esatti -- solo quale fazione ha vinto, o se e' pareggio. Si posiziona la tessera vittoria, si attivano gli eventuali poteri della casella raggiunta, e Durindana passa al vicino di sinistra."
+  },
+  vittoria_cristiana: {
+    image: 'vittoria_cristiana', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'La fazione Cristiana ha vinto', audio: 'fanfareGrand',
+    rules: "La fazione Cristiana ha completato il proprio tracciato di caselle (o ha vinto per Fendente Mortale su Agramante): la partita finisce qui."
+  },
+  vittoria_saracena: {
+    image: 'vittoria_saracena', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'La fazione Saracena ha vinto', audio: 'fanfareGrand',
+    rules: "La fazione Saracena ha completato il proprio tracciato di caselle (o ha vinto per Fendente Mortale su Orlando): la partita finisce qui."
+  },
+  vittoria_isabella: {
+    image: 'vittoria_isabella', eyebrow: 'Fase 6 \u2014 Vittoria', title: 'Isabella vince da sola, in solitaria', audio: 'fanfareSolo',
+    rules: "Isabella e' stata colpita da un Fendente Mortale: la partita finisce immediatamente e lei vince da sola, in solitaria."
+  },
 }
 
 // Hook di gating: mostra la transizione UNA volta per ciascuna "chiave" (es. tutte le
@@ -54,6 +81,29 @@ export function PhaseTransition({ phaseKey, onContinue }) {
       <button type="button" className="phase-transition-btn phase-transition-btn-main" onClick={onContinue}>
         Continua &#9654;
       </button>
+    </div>
+  )
+}
+
+// Pulsante "regole di questa fase": chi conosce gia' il gioco lo ignora, chi e' alle prime
+// armi puo' aprirlo per un promemoria rapido senza dover andare a cercare il regolamento.
+// Riusa la stessa chiave di PHASE_TRANSITIONS, cosi' il testo resta coerente con quello
+// mostrato nella schermata di passaggio tra una fase e l'altra.
+export function PhaseRulesButton({ phaseKey }) {
+  const [open, setOpen] = useState(false)
+  const meta = PHASE_TRANSITIONS[phaseKey]
+  if (!meta) return null
+  return (
+    <div style={{ margin: '10px 0' }}>
+      <button type="button" className="secondary" onClick={() => setOpen(o => !o)}>
+        &#128214; {open ? 'Nascondi regole' : 'Regole di questa fase'}
+      </button>
+      {open && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <div className="eyebrow">{meta.eyebrow}</div>
+          <p style={{ margin: '6px 0 0' }}>{meta.rules}</p>
+        </div>
+      )}
     </div>
   )
 }

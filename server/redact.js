@@ -21,6 +21,8 @@ export function redactForSupervisor(state) {
     pendingBoardPower: currentPower,
     pendingInterrupt: state.pendingInterrupt,
     pendingReaction: state.pendingReaction,
+    councilMessages: state.councilMessages || [],
+    councilReady: state.councilReady || [],
     battle: state.battle,
     players: state.players.map(p => ({
       id: p.id,
@@ -85,6 +87,8 @@ export function redactForViewer(state, viewerId) {
           deadline: state.pendingReaction.deadline || null
         }
       : null,
+    councilMessages: state.councilMessages || [],
+    councilReady: state.councilReady || [],
     pendingRevealPlayerId: state.phase === 'phase3-reveal'
       ? (state.battle.participants.find(id => !state.battle.reveals[id]) ?? null)
       : null,

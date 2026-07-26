@@ -77,6 +77,31 @@ const INTERRUPT_TIMEOUT_MS = 5000
 // cosi' non finisce in chiaro nel bundle JS mandato ai client.
 const SUPERVISOR_PASSWORD = 'Admin!!!'
 
+// Se tutte le carte volontarie sono state decise e non c'e' nessuna interruzione/reazione
+// ancora pendente, apre il Consiglio di guerra. Va richiamata dopo ogni azione che potrebbe
+// aver deciso l'ultima carta rimasta (giocarla, passare, o risolvere un'interruzione/reazione,
+// anche quando si risolve da sola per timeout).
+// FIX: in modalita' online mancava qualunque transizione automatica da "tutte le carte
+// volontarie decise" a Fase 3 -- con le carte equipaggiamento attive il gioco sarebbe
+// rimasto bloccato in Fase 2 per sempre. Va richiamata dopo ogni azione che potrebbe aver
+// deciso l'ultima carta rimasta (giocarla, passare, risolvere un'interruzione/reazione,
+// anche quando si risolve da sola per timeout).
+// FIX: mancava completamente anche questa transizione online (fase2-instant -> fase2-voluntary):
+// una volta risolte tutte le istantanee, nulla faceva mai avanzare la fase. In hotseat esiste
+// gia' (il client la gestisce da solo); qui va fatta lato server.
+function maybeAdvanceToVoluntary(state) {
+  if (state.phase === 'phase2-instant' && engine.instantCardsPending(state).length === 0) {
+    state.phase = 'phase2-voluntary'
+  }
+}
+
+function maybeAdvanceToSelection(state) {
+  if (state.phase === 'phase2-voluntary' && !state.pendingInterrupt && !state.pendingReaction &&
+      engine.voluntaryCardsPending(state).length === 0 && engine.allCouncilReady(state)) {
+    engine.beginParticipantSelection(state)
+  }
+}
+
 // In modalita' online, la finestra di interruzione (Parata/Orrilo) non resta aperta
 // a tempo indeterminato: il possessore ha 5 secondi per decidere, altrimenti la carta
 // non si attiva (equivale a "non rispondere"). Il timer e' gestito lato server, che e'
@@ -94,6 +119,7 @@ function scheduleInterruptTimeout(roomCode) {
       engine.resolveNextAutomaticInstants(room.game)
       if (room.game.pendingInterrupt) scheduleInterruptTimeout(roomCode)
       if (room.game.pendingReaction) scheduleReactionTimeout(roomCode)
+      maybeAdvanceToSelection(room.game)
       broadcastState(roomCode)
     }
   }, INTERRUPT_TIMEOUT_MS)
@@ -123,6 +149,7 @@ function scheduleReactionTimeout(roomCode) {
       engine.resolveNextAutomaticInstants(room.game)
       if (room.game.pendingInterrupt) scheduleInterruptTimeout(roomCode)
       if (room.game.pendingReaction) scheduleReactionTimeout(roomCode)
+      maybeAdvanceToSelection(room.game)
       broadcastState(roomCode)
     }
   }, REACTION_TIMEOUT_MS)
@@ -144,6 +171,7 @@ function startGameIfReady(roomCode) {
     if (!room.game.needsPhase1) {
       engine.startRound(room.game)
       engine.resolveNextAutomaticInstants(room.game)
+      maybeAdvanceToVoluntary(room.game)
     }
     broadcastLobby(roomCode)
     broadcastState(roomCode)
@@ -224,12 +252,14 @@ io.on('connection', (socket) => {
           if (!state.pendingInterrupt || state.pendingInterrupt.targetId !== myId) return
           clearInterruptTimeout(room)
           engine.resolveInterrupt(state, !!payload.playCard)
+          maybeAdvanceToSelection(state)
           break
         }
         case 'resolveReaction': {
           if (!state.pendingReaction || state.pendingReaction.holderId !== myId) return
           clearReactionTimeout(room)
           engine.resolveReaction(state, !!payload.activate, payload.targetId)
+          maybeAdvanceToSelection(state)
           break
         }
         case 'ackPhase1': {
@@ -247,12 +277,25 @@ io.on('connection', (socket) => {
           const notDecided = engine.voluntaryCardsPending(state)
           if (notDecided[0]?.id !== myId) return
           engine.playVoluntaryCard(state, myId, payload)
+          maybeAdvanceToSelection(state)
           break
         }
         case 'passVoluntary': {
           const notDecided = engine.voluntaryCardsPending(state)
           if (notDecided[0]?.id !== myId) return
           engine.passVoluntaryCard(state, myId)
+          maybeAdvanceToSelection(state)
+          break
+        }
+        case 'addCouncilMessage': {
+          if (state.phase !== 'phase2-instant' && state.phase !== 'phase2-voluntary') return
+          engine.addCouncilMessage(state, myId, payload.text)
+          break
+        }
+        case 'setCouncilReady': {
+          if (state.phase !== 'phase2-instant' && state.phase !== 'phase2-voluntary') return
+          engine.setCouncilReady(state, myId, !!payload.ready)
+          maybeAdvanceToSelection(state)
           break
         }
         case 'chooseParticipants': {
@@ -312,6 +355,7 @@ io.on('connection', (socket) => {
           return
       }
       engine.resolveNextAutomaticInstants(state)
+      maybeAdvanceToVoluntary(state)
       if (state.pendingInterrupt) scheduleInterruptTimeout(roomCode)
       if (state.pendingReaction) scheduleReactionTimeout(roomCode)
       broadcastState(roomCode)

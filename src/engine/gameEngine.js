@@ -73,6 +73,8 @@ export function createGame(playerNames, options = {}) {
     phase1Acked: [],
     pendingInterrupt: null,
     pendingReaction: null, // Palazzo di Atlante: offerta reattiva a ridirigere l'ultimo effetto
+    councilMessages: [], // messaggi pubblici del "Consiglio dei cavalieri" durante la Fase 2
+    councilReady: [], // id dei giocatori pronti a passare a Fase 3 (solo online)
     phase: n >= 8 ? 'phase1-reveal' : 'phase2-deal',
     participantsBaseline: 2,
     participantsDelta: 0,
@@ -251,6 +253,8 @@ function resetRoundFlags(state) {
     player.orriloImmune = false
   }
   state.participantsDelta = 0
+  state.councilMessages = []
+  state.councilReady = []
   state.factionBonus = { cristiana: 0, saracena: 0 }
 }
 
@@ -605,6 +609,33 @@ function moveDurindana(state, delta) {
 }
 
 // --- FASE 3: battaglia ---
+
+// Il "Consiglio dei cavalieri": non e' una fase a se', ma una bacheca di commenti pubblici
+// visibile durante tutta la Fase 2 (istantanee + volontarie) mentre le carte vengono
+// giocate, cosi' chi vuole puo' giustificare le proprie scelte o dare un consiglio al
+// possessore di Durindana, senza fermare il gioco per farlo.
+export function addCouncilMessage(state, playerId, text) {
+  const player = getPlayer(state, playerId)
+  const trimmed = (text || '').trim().slice(0, 300)
+  if (!trimmed) return state
+  state.councilMessages = [...(state.councilMessages || []), { playerId, name: player.name, text: trimmed }]
+  return state
+}
+
+// Pulsante "pronto" (rosso/verde), solo modalita' online: ciascun giocatore lo preme quando
+// ritiene di aver appreso/condiviso abbastanza informazioni. Si passa a Fase 3 solo quando
+// tutti i giocatori sono pronti E tutte le carte volontarie sono state decise.
+export function setCouncilReady(state, playerId, ready) {
+  const set = new Set(state.councilReady || [])
+  if (ready) set.add(playerId)
+  else set.delete(playerId)
+  state.councilReady = [...set]
+  return state
+}
+
+export function allCouncilReady(state) {
+  return state.players.length > 0 && state.players.every(p => (state.councilReady || []).includes(p.id))
+}
 
 export function beginParticipantSelection(state) {
   state.phase = 'phase3-select'
