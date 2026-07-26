@@ -221,7 +221,7 @@ export const BOARD_POSITIONS = {
   ]
 }
 
-export function BoardView({ game, debugGrid = false, positions = null }) {
+export function BoardView({ game, positions = null }) {
   const track = game.boardTrack
   const is9Plus = track.some(p => Array.isArray(p))
   const boardImg = is9Plus ? BOARD_IMAGES.tabellone_9_full : BOARD_IMAGES.tabellone_6_8_full
@@ -258,29 +258,6 @@ export function BoardView({ game, debugGrid = false, positions = null }) {
               </div>
             )
           })
-        ))}
-        {debugGrid && ['cristiana', 'saracena'].map(faction => (
-          boxes[faction].map((box, i) => (
-            <div
-              key={`grid-${faction}-${i}`}
-              style={{
-                position: 'absolute',
-                left: `${box.left}%`,
-                top: `${box.top}%`,
-                width: `${box.width}%`,
-                height: `${box.height}%`,
-                border: `2px solid ${faction === 'cristiana' ? 'rgba(158,43,37,0.9)' : 'rgba(31,59,58,0.9)'}`,
-                display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start'
-              }}
-            >
-              <span style={{
-                background: faction === 'cristiana' ? 'rgba(158,43,37,0.9)' : 'rgba(31,59,58,0.9)',
-                color: '#fff', fontSize: '0.7em', fontWeight: 'bold', padding: '1px 4px'
-              }}>
-                {faction === 'cristiana' ? 'C' : 'S'}{i + 1}
-              </span>
-            </div>
-          ))
         ))}
       </div>
     </div>
@@ -332,32 +309,6 @@ export function BoardPowersPanel({ game }) {
   )
 }
 
-export function BoardCalibrationTool() {
-  const [boardType, setBoardType] = useState('68')
-
-  const fakeGame = {
-    board: { cristiana: 0, saracena: 0 },
-    boardTrack: boardType === '68'
-      ? [null, null, 'spie_a_palazzo', 'spie_a_palazzo', 'vittoria']
-      : ['spie_a_palazzo', 'spie_a_palazzo', ['spie_a_palazzo', 'cercare_amore'], ['fendente_mortale', 'cercare_amore'], 'vittoria']
-  }
-
-  return (
-    <div className="card">
-      <div className="eyebrow">Calibrazione tabellone</div>
-      <h2>Riquadri misurati con precisione</h2>
-      <p style={{ fontSize: '0.9em', color: 'var(--ink-soft)' }}>
-        Ogni riquadro mostra esattamente dove entra la tessera vittoria su quella casella.
-        Se qualcuno non torna, dammi le nuove coordinate in pixel (angolo alto-sinistra e basso-destra) su un'immagine 1152&times;648 e le aggiorno.
-      </p>
-      <div className="player-list" style={{ marginBottom: 14 }}>
-        <button className={boardType === '68' ? '' : 'secondary'} onClick={() => setBoardType('68')}>Tabellone 6-8</button>
-        <button className={boardType === '9' ? '' : 'secondary'} onClick={() => setBoardType('9')}>Tabellone 9+</button>
-      </div>
-      <BoardView game={fakeGame} debugGrid />
-    </div>
-  )
-}
 export function LogPanel({ log }) {
   return (
     <div className="log-panel">
