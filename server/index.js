@@ -17,7 +17,7 @@ const rooms = {}
 
 function getOrCreateRoom(roomCode, requiredPlayers, useEquipment) {
   if (!rooms[roomCode]) {
-    rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null }
+    rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null, voiceLink: null }
   }
   return rooms[roomCode]
 }
@@ -27,7 +27,8 @@ function lobbyPayload(room) {
     players: room.players.map(p => ({ name: p.name, connected: p.connected })),
     required: room.requiredPlayers,
     useEquipment: room.useEquipment,
-    started: !!room.game
+    started: !!room.game,
+    voiceLink: room.voiceLink || null
   }
 }
 
@@ -60,10 +61,10 @@ function broadcastState(roomCode) {
   if (!room || !room.game) return
   for (const p of room.players) {
     if (!p.socketId) continue
-    io.to(p.socketId).emit('state', redactForViewer(room.game, p.playerId))
+    io.to(p.socketId).emit('state', { ...redactForViewer(room.game, p.playerId), voiceLink: room.voiceLink || null })
   }
   for (const socketId of room.supervisors) {
-    io.to(socketId).emit('supervisorState', redactForSupervisor(room.game))
+    io.to(socketId).emit('supervisorState', { ...redactForSupervisor(room.game), voiceLink: room.voiceLink || null })
   }
 }
 
@@ -322,6 +323,19 @@ io.on('connection', (socket) => {
   // Lascia il tavolo: permesso solo prima che la partita sia iniziata (a partita in corso
   // il posto non puo' essere richiuso senza rompere il gioco per gli altri; in quel caso
   // resta solo la disconnessione/riconnessione). Libera il posto e aggiorna l'elenco stanze.
+  // Link facoltativo per una chat vocale (Google Meet, Discord, ecc.), condiviso in tempo
+  // reale con tutti quelli nella stanza. Chiunque nella stanza puo' impostarlo/cambiarlo.
+  socket.on('setVoiceLink', ({ url }) => {
+    const roomCode = socket.data.roomCode
+    if (!roomCode || !rooms[roomCode]) return
+    const room = rooms[roomCode]
+    const trimmed = (url || '').trim()
+    if (trimmed && !/^https?:\/\//i.test(trimmed)) return
+    room.voiceLink = trimmed || null
+    broadcastLobby(roomCode)
+    if (room.game) broadcastState(roomCode)
+  })
+
   socket.on('leaveRoom', () => {
     const roomCode = socket.data.roomCode
     if (!roomCode || !rooms[roomCode]) return

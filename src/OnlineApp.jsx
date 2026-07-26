@@ -80,6 +80,7 @@ export default function OnlineApp() {
   }, [socket])
 
   const act = (type, payload = {}) => socket.emit('action', { type, payload })
+  const setVoiceLink = (url) => socket.emit('setVoiceLink', { url })
 
   if (connError) {
     return <div className="card"><div className="eyebrow">Connessione</div><p>{connError}</p></div>
@@ -116,6 +117,7 @@ export default function OnlineApp() {
       <LobbyScreen
         lobby={lobby}
         roomCode={roomCode}
+        onSetVoiceLink={setVoiceLink}
         onLeave={() => {
           socket.emit('leaveRoom')
           localStorage.removeItem('orlando_token')
@@ -128,7 +130,7 @@ export default function OnlineApp() {
     )
   }
 
-  return <GameScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={() => setSecretInfo(null)} />
+  return <GameScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={() => setSecretInfo(null)} onSetVoiceLink={setVoiceLink} />
 }
 
 function SupervisorScreen({ state, roomCode }) {
@@ -211,7 +213,43 @@ function JoinScreen({ name, setName, roomCode, setRoomCode, playerCount, setPlay
   )
 }
 
-function LobbyScreen({ lobby, roomCode, onLeave }) {
+// Link facoltativo per una chat vocale (Google Meet, Discord, ecc.), sincronizzato in
+// tempo reale con tutti quelli nella stanza. "Apri una nuova Google Meet" usa la scorciatoia
+// ufficiale meet.new: crea all'istante una riunione nuova per chi clicca (richiede di essere
+// gia' loggati con un account Google in quella scheda) -- va poi incollata qui per condividerla
+// con gli altri, dato che ogni click su meet.new genera una riunione diversa.
+function VoiceLinkPanel({ voiceLink, onSetVoiceLink, compact }) {
+  const [draft, setDraft] = useState('')
+  return (
+    <div className={compact ? 'card' : 'card'} style={compact ? { margin: '10px 0', padding: '12px 16px' } : undefined}>
+      <div className="eyebrow">Chat vocale (facoltativa)</div>
+      {voiceLink ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+          <a href={voiceLink} target="_blank" rel="noopener noreferrer">
+            <button type="button">&#127908; Entra nella chat vocale</button>
+          </a>
+          <button type="button" className="secondary" onClick={() => onSetVoiceLink('')}>Rimuovi link</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <a href="https://meet.new" target="_blank" rel="noopener noreferrer">
+            <button type="button" className="secondary">Apri una nuova Google Meet</button>
+          </a>
+          <input
+            type="text"
+            placeholder="...poi incolla qui il link per condividerlo"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            style={{ flex: 1, minWidth: 180 }}
+          />
+          <button type="button" disabled={!draft.trim()} onClick={() => { onSetVoiceLink(draft.trim()); setDraft('') }}>Condividi con tutti</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LobbyScreen({ lobby, roomCode, onLeave, onSetVoiceLink }) {
   if (!lobby) {
     return (
       <div className="card">
@@ -233,6 +271,7 @@ function LobbyScreen({ lobby, roomCode, onLeave }) {
           </div>
         ))}
       </div>
+      <VoiceLinkPanel voiceLink={lobby.voiceLink} onSetVoiceLink={onSetVoiceLink} compact />
       <button className="secondary" style={{ marginTop: 14 }} onClick={onLeave}>Lascia il tavolo</button>
     </div>
   )
@@ -276,7 +315,7 @@ function transitionKeyForOnline(state) {
   return null
 }
 
-function GameScreen({ state, act, secretInfo, clearSecretInfo }) {
+function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink }) {
   const me = state.players.find(p => p.id === state.myId)
   const [showTable, setShowTable] = useState(true)
   const [showBoard, setShowBoard] = useState(false)
@@ -382,6 +421,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo }) {
       </label>
       {showTable && <SuspicionBoard state={state} viewerId={state.myId} />}
       {showBoard && <BoardPowersPanel game={state} />}
+      <VoiceLinkPanel voiceLink={state.voiceLink} onSetVoiceLink={onSetVoiceLink} compact />
       <LogPanel log={state.log} />
     </div>
   )
