@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import * as engine from './engine/gameEngine.js'
 import { EQUIPMENT_BY_ID } from './engine/equipment.js'
 import { CHARACTER_IMAGES, EQUIPMENT_IMAGES, BOARD_IMAGES } from './assets/index.js'
-import { Divider, FactionBadge, IdentityBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton } from './shared/ui.jsx'
+import { Divider, FactionBadge, IdentityBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton, describeEffect } from './shared/ui.jsx'
 
 // Stessa password della modalita' amministratore online. Qui e' per forza lato client
 // (l'hotseat non ha un server): basta a scoraggiare un'occhiata rapida di un giocatore
@@ -51,8 +51,11 @@ function SetupScreen({ onCreate }) {
       <Divider />
       <label style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>Numero di giocatori</label>
       <select value={count} onChange={e => setCountAndResize(Number(e.target.value))} style={{ width: '100%', padding: '10px 12px', fontFamily: 'inherit', marginBottom: 14 }}>
-        {[6, 7, 8, 9, 10, 11, 12, 13].map(n => <option key={n} value={n}>{n} giocatori</option>)}
+        {[6, 7, 8, 9, 10].map(n => <option key={n} value={n}>{n} giocatori</option>)}
       </select>
+      <p style={{ color: 'var(--ink-soft)', fontSize: '0.8em', marginTop: -8, marginBottom: 14 }}>
+        In hotseat il numero massimo e' 10: con piu' persone i passaggi del dispositivo diventano troppi. Per gruppi piu' grandi conviene la modalita' online.
+      </p>
       <label style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>Modalita'</label>
       <select value={useEquipment ? 'esperti' : 'novizi'} onChange={e => setUseEquipment(e.target.value === 'esperti')} style={{ width: '100%', padding: '10px 12px', fontFamily: 'inherit', marginBottom: 14 }}>
         <option value="esperti">Esperti (con carte equipaggiamento)</option>
@@ -211,7 +214,7 @@ function VoluntaryCardFlow({ game, update, showTable }) {
             {card.timing === 'bluff' && 'Questa carta non ha effetto: puoi tenerla nascosta.'}
             {card.timing === 'passive' && 'Questa carta resta nascosta finche\' non sarai bersagliato.'}
             {card.timing === 'interrupt' && 'Questa carta si gioca solo in risposta a un\'eliminazione dalla battaglia.'}
-            {card.timing === 'reactive' && 'Questa carta si attiva da sola, subito dopo che un\'eliminazione va a segno: non ora.'}
+            {card.timing === 'reactive' && 'Questa carta si attiva da sola, subito dopo un effetto compatibile: non ora.'}
           </p>
         )}
 
@@ -582,23 +585,28 @@ function ReactionResponseFlow({ game, update, showTable }) {
   const pending = game.pendingReaction
   const holder = game.players.find(p => p.id === pending.holderId)
   const card = EQUIPMENT_BY_ID[holder.hand]
+  const needsTarget = pending.cardId === 'palazzo_di_atlante'
   const [targetId, setTargetId] = useState('')
-  const currentTarget = game.players.find(p => p.id === pending.eff.targetId)
-  const candidates = game.players.filter(p => p.id !== pending.eff.targetId)
+  const excludeId = pending.eff?.effect === 'eliminate' ? pending.eff.targetId : null
+  const candidates = game.players.filter(p => p.id !== excludeId && p.id !== holder.id)
   return (
     <PassGate playerName={holder.name}>
       <div className="card">
-        <div className="eyebrow">Puoi ridirigere l'ultimo effetto</div>
+        <div className="eyebrow">{needsTarget ? "Puoi ridirigere l'ultimo effetto" : "Puoi annullare l'ultimo effetto"}</div>
         <h2>Vuoi attivare {card.name}?</h2>
         {EQUIPMENT_IMAGES[card.id] && <img className="card-art" src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
         <p>{card.description}</p>
-        <p>Effetto da ridirigere: eliminazione dalla battaglia di <strong>{currentTarget?.name}</strong>.</p>
-        <div className="player-list">
-          {candidates.map(o => (
-            <button key={o.id} className={targetId === o.id ? '' : 'secondary'} onClick={() => setTargetId(o.id)}>{o.name}</button>
-          ))}
-        </div>
-        <button disabled={!targetId} onClick={() => update(s => engine.resolveReaction(s, true, targetId))}>Attiva su questo bersaglio</button>
+        <p>Effetto in questione: <strong>{describeEffect(pending.eff, game.players)}</strong>.</p>
+        {needsTarget && (
+          <div className="player-list">
+            {candidates.map(o => (
+              <button key={o.id} className={targetId === o.id ? '' : 'secondary'} onClick={() => setTargetId(o.id)}>{o.name}</button>
+            ))}
+          </div>
+        )}
+        <button disabled={needsTarget && !targetId} onClick={() => update(s => engine.resolveReaction(s, true, targetId))}>
+          {needsTarget ? 'Ridirigi su questo bersaglio' : 'Annulla questo effetto'}
+        </button>
         <button className="secondary" onClick={() => update(s => engine.resolveReaction(s, false))}>Non attivare</button>
       </div>
       {showTable && <SuspicionBoard state={game} viewerId={holder.id} storageKeySuffix="-hotseat" />}
@@ -775,7 +783,11 @@ export default function LocalHotseatApp() {
     return (
       <div className="app-shell">
         <SetupScreen onCreate={(names, options) => {
-          const g = engine.createGame(names, options)
+          const g = engine.createGame(names, {
+            ...options,
+            maxPlayers: 10,
+            excludeCardIds: ['anello_di_angelica', 'palazzo_di_atlante']
+          })
           setGame(g)
           setStage('roles')
         }} />

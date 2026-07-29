@@ -54,6 +54,27 @@ export function usePhaseTransitionGate(currentKey) {
   return { showTransition, dismiss }
 }
 
+// Descrive in italiano l'ultimo effetto giocato, per le schermate di Anello di
+// Angelica/Palazzo di Atlante (che ora possono reagire anche a effetti diversi da una
+// semplice eliminazione dalla battaglia).
+export function describeEffect(eff, players) {
+  if (!eff) return "l'ultimo effetto giocato"
+  switch (eff.effect) {
+    case 'eliminate': {
+      const t = players.find(p => p.id === eff.targetId)
+      return `l'eliminazione dalla battaglia di ${t?.name || '???'}`
+    }
+    case 'move_durindana':
+      return 'lo spostamento di Durindana'
+    case 'faction_bonus':
+      return `il bonus di fazione per ${eff.faction === 'cristiana' ? 'i Cristiani' : 'i Saraceni'}`
+    case 'participants_delta':
+      return 'la modifica al numero di partecipanti richiesti'
+    default:
+      return "l'ultimo effetto giocato"
+  }
+}
+
 export function PhaseTransition({ phaseKey, onContinue }) {
   const meta = PHASE_TRANSITIONS[phaseKey]
   React.useEffect(() => {

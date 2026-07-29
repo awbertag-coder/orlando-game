@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { EQUIPMENT_BY_ID } from './engine/equipment.js'
 import { EQUIPMENT_IMAGES } from './assets/index.js'
-import { Divider, FactionBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, TableView, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton } from './shared/ui.jsx'
+import { Divider, FactionBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, TableView, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton, describeEffect } from './shared/ui.jsx'
 
 function getServerUrl() {
   // In produzione (Render, Netlify, ecc.) frontend e backend vivono su domini diversi:
@@ -568,7 +568,7 @@ function MyVoluntaryCard({ me, act, allPlayers }) {
           {card.timing === 'bluff' && 'Questa carta non ha effetto: puoi tenerla nascosta.'}
           {card.timing === 'passive' && 'Questa carta resta nascosta finche\' non sarai bersagliato.'}
           {card.timing === 'interrupt' && 'Questa carta si gioca solo in risposta a un\'eliminazione dalla battaglia.'}
-          {card.timing === 'reactive' && 'Questa carta si attiva da sola, subito dopo che un\'eliminazione va a segno: non ora.'}
+          {card.timing === 'reactive' && 'Questa carta si attiva da sola, subito dopo un effetto compatibile: non ora.'}
         </p>
       )}
 
@@ -745,8 +745,10 @@ function MyInterruptResponse({ me, act, deadline }) {
 
 function MyReactionResponse({ state, me, act, deadline }) {
   const card = me.hand ? EQUIPMENT_BY_ID[me.hand] : null
-  const currentTarget = state.players.find(p => p.id === state.pendingReaction.effTargetId)
-  const candidates = state.players.filter(p => p.id !== state.pendingReaction.effTargetId)
+  const needsTarget = card?.effect === 'redirect_target'
+  const eff = state.pendingReaction.eff
+  const excludeId = eff?.effect === 'eliminate' ? eff.targetId : null
+  const candidates = state.players.filter(p => p.id !== excludeId && p.id !== me.id)
   const [targetId, setTargetId] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(() => deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : null)
 
@@ -761,7 +763,7 @@ function MyReactionResponse({ state, me, act, deadline }) {
   const timeUp = secondsLeft === 0
   return (
     <div className="card">
-      <div className="eyebrow">Puoi ridirigere l'ultimo effetto</div>
+      <div className="eyebrow">{needsTarget ? "Puoi ridirigere l'ultimo effetto" : "Puoi annullare l'ultimo effetto"}</div>
       {secondsLeft !== null && (
         <p style={{ fontWeight: 'bold', color: timeUp ? 'var(--ink-soft)' : 'inherit' }}>
           {timeUp ? 'Tempo scaduto: in attesa che la partita prosegua&hellip;' : `Hai ${secondsLeft} second${secondsLeft === 1 ? 'o' : 'i'} per decidere.`}
@@ -770,13 +772,17 @@ function MyReactionResponse({ state, me, act, deadline }) {
       <h2>Vuoi attivare {card?.name}?</h2>
       {card && EQUIPMENT_IMAGES[card.id] && <img className="card-art" src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
       <p>{card?.description}</p>
-      <p>Effetto da ridirigere: eliminazione dalla battaglia di <strong>{currentTarget?.name}</strong>.</p>
-      <div className="player-list">
-        {candidates.map(o => (
-          <button key={o.id} className={targetId === o.id ? '' : 'secondary'} disabled={timeUp} onClick={() => setTargetId(o.id)}>{o.name}</button>
-        ))}
-      </div>
-      <button disabled={timeUp || !targetId} onClick={() => act('resolveReaction', { activate: true, targetId })}>Attiva su questo bersaglio</button>
+      <p>Effetto in questione: <strong>{describeEffect(eff, state.players)}</strong>.</p>
+      {needsTarget && (
+        <div className="player-list">
+          {candidates.map(o => (
+            <button key={o.id} className={targetId === o.id ? '' : 'secondary'} disabled={timeUp} onClick={() => setTargetId(o.id)}>{o.name}</button>
+          ))}
+        </div>
+      )}
+      <button disabled={timeUp || (needsTarget && !targetId)} onClick={() => act('resolveReaction', { activate: true, targetId })}>
+        {needsTarget ? 'Ridirigi su questo bersaglio' : 'Annulla questo effetto'}
+      </button>
       <button disabled={timeUp} className="secondary" onClick={() => act('resolveReaction', { activate: false })}>Non attivare</button>
     </div>
   )

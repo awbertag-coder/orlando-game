@@ -83,7 +83,7 @@ export function redactForViewer(state, viewerId) {
     pendingReaction: state.pendingReaction
       ? {
           actionableByMe: state.pendingReaction.holderId === viewerId,
-          effTargetId: state.pendingReaction.eff.targetId,
+          eff: state.pendingReaction.eff,
           deadline: state.pendingReaction.deadline || null
         }
       : null,

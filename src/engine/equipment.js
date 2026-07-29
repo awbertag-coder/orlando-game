@@ -87,8 +87,8 @@ export const EQUIPMENT = [
     description: 'Puoi scegliere se utilizzarla. Elimina un cavaliere dalla battaglia; se riesce, pesca una nuova carta equipaggiamento.'
   },
   {
-    id: 'anello_di_angelica', name: 'Anello di Angelica', timing: 'voluntary', effect: 'cancel_equipment_effect',
-    description: 'Puoi scegliere se utilizzarla. Annulla l\'effetto di una carta equipaggiamento, anche non diretta a te.'
+    id: 'anello_di_angelica', name: 'Anello di Angelica', timing: 'reactive', effect: 'cancel_equipment_effect',
+    description: 'Si attiva subito dopo che un effetto viene applicato: puoi scegliere se annullarlo (anche se non era diretto a te).'
   },
   {
     id: 'brunello_il_ladro', name: 'Brunello il ladro', timing: 'voluntary', effect: 'cancel_ring',
@@ -155,6 +155,6 @@ export const EQUIPMENT_BY_ID = Object.fromEntries(EQUIPMENT.map(c => [c.id, c]))
 // Mazzo iniziale: un id ripetuto per ogni copia fisica (qui semplifichiamo con 1 copia ciascuna =
 // 26 carte "normali" -- il regolamento parla di 30 carte totali; alcune ricorrono piu' volte nel
 // mazzo fisico. Per il prototipo usiamo 1 copia per id e peschiamo con reinserimento se il mazzo finisce.
-export function buildEquipmentDeck() {
-  return EQUIPMENT.map(c => c.id)
+export function buildEquipmentDeck(excludeIds = []) {
+  return EQUIPMENT.filter(c => !excludeIds.includes(c.id)).map(c => c.id)
 }

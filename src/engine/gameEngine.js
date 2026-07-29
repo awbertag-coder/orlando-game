@@ -18,8 +18,13 @@ function shuffle(arr) {
 export function createGame(playerNames, options = {}) {
   const n = playerNames.length
   const useEquipment = options.useEquipment !== false // default: true (modalita' esperti)
+  const excludeCardIds = options.excludeCardIds || []
+  const maxPlayers = options.maxPlayers || 15
   if (n < 6) {
     throw new Error('Servono almeno 6 giocatori')
+  }
+  if (n > maxPlayers) {
+    throw new Error(`Con questa modalita\' si possono avere al massimo ${maxPlayers} giocatori`)
   }
   const charIds = shuffle(getRosterForPlayerCount(n))
   const players = playerNames.map((name, i) => {
@@ -64,7 +69,7 @@ export function createGame(playerNames, options = {}) {
     playerCount: n,
     useEquipment, // modalita' esperti (true, con carte equipaggiamento) o novizi (false)
     needsPhase1: n >= 8,
-    deck: shuffle(buildEquipmentDeck()),
+    deck: shuffle(buildEquipmentDeck(excludeCardIds)),
     discard: [],
     board: { cristiana: 0, saracena: 0 },
     boardTrack: getBoardTrack(n),
@@ -406,6 +411,7 @@ export function playVoluntaryCard(state, playerId, targets = {}) {
     case 'move_durindana': {
       moveDurindana(state, -card.value)
       state.lastEffect = { effect: 'move_durindana', playerId, value: card.value }
+      offerReactiveRedirect(state, [playerId])
       break
     }
     case 'eliminate_choice':
@@ -429,11 +435,13 @@ export function playVoluntaryCard(state, playerId, targets = {}) {
     case 'faction_bonus': {
       state.factionBonus[card.faction] += 1
       state.lastEffect = { effect: 'faction_bonus', playerId, faction: card.faction }
+      offerReactiveRedirect(state, [playerId])
       break
     }
     case 'participants_delta': {
       state.participantsDelta += card.value
       state.lastEffect = { effect: 'participants_delta', playerId, value: card.value }
+      offerReactiveRedirect(state, [playerId])
       break
     }
     case 'steal_equipment': {
@@ -554,30 +562,58 @@ function redirectEffect(state, eff, newTargetId) {
   }
 }
 
-// Dopo che un'eliminazione e' stata confermata (non annullata da un'interruzione), controlla
-// se qualcuno possiede Il Palazzo di Atlante non ancora attivato in questo round: se si',
-// apre una finestra reattiva (analoga a pendingInterrupt) per chiedergli se vuole ridirigerla.
-function offerReactiveRedirect(state, pausedPlayerIds = []) {
+// Apre una finestra reattiva per una specifica carta, se le condizioni sono giuste: la mano
+// del possessore corrisponde alla carta, non e' gia' stata usata in questo round, e l'ultimo
+// effetto e' del tipo che quella carta puo' davvero toccare.
+function tryOfferReactive(state, cardId, pausedPlayerIds) {
   if (state.pendingReaction || state.pendingInterrupt) return false
-  if (!state.lastEffect || state.lastEffect.effect !== 'eliminate') return false
-  const holder = state.players.find(p =>
-    p.hand === 'palazzo_di_atlante' && !(p.reactiveCardsUsed || []).includes('palazzo_di_atlante')
-  )
+  if (!state.lastEffect) return false
+  if (cardId === 'anello_di_angelica') {
+    // L'Anello annulla un ventaglio piu' ampio di effetti, non solo le eliminazioni.
+    if (!['move_durindana', 'eliminate', 'faction_bonus', 'participants_delta'].includes(state.lastEffect.effect)) return false
+  } else if (cardId === 'palazzo_di_atlante') {
+    if (state.lastEffect.effect !== 'eliminate') return false
+  } else {
+    return false
+  }
+  const holder = state.players.find(p => p.hand === cardId && !(p.reactiveCardsUsed || []).includes(cardId))
   if (!holder) return false
-  state.pendingReaction = { holderId: holder.id, eff: state.lastEffect, pausedPlayerIds }
+  state.pendingReaction = { holderId: holder.id, cardId, eff: state.lastEffect, pausedPlayerIds }
   return true
 }
 
-// Risolve la finestra reattiva del Palazzo di Atlante: activate=true con un targetId ridirige
-// l'ultimo effetto sul nuovo bersaglio; altrimenti non succede nulla (e la carta resta
-// disponibile per reagire a un effetto successivo nello stesso round, come Parata/Orrilo).
+// Dopo che un effetto e' stato confermato (non annullato da un'interruzione), offre prima
+// una finestra reattiva all'Anello di Angelica se possibile; se non si apre (nessun
+// possessore, o l'effetto non e' di un tipo che l'Anello puo' annullare), prova con Il
+// Palazzo di Atlante (solo per le eliminazioni).
+function offerReactiveRedirect(state, pausedPlayerIds = []) {
+  return tryOfferReactive(state, 'anello_di_angelica', pausedPlayerIds) ||
+         tryOfferReactive(state, 'palazzo_di_atlante', pausedPlayerIds)
+}
+
+// Risolve la finestra reattiva corrente (Anello di Angelica o Il Palazzo di Atlante).
+// activate=true attiva l'effetto della carta (annullamento per l'Anello, che non richiede
+// un bersaglio; ridirezione per il Palazzo, che invece lo richiede). Rifiutare non consuma
+// la carta: resta disponibile per un effetto successivo nello stesso round.
 export function resolveReaction(state, activate, targetId) {
   const pending = state.pendingReaction
   if (!pending) return state
   const holder = getPlayer(state, pending.holderId)
-  if (activate && targetId && holder.hand === 'palazzo_di_atlante') {
+
+  if (activate && holder.hand === pending.cardId) {
     holder.reactiveCardsUsed = [...(holder.reactiveCardsUsed || []), holder.hand]
-    redirectEffect(state, pending.eff, targetId)
+    if (pending.cardId === 'anello_di_angelica') {
+      const undone = undoEffect(state, pending.eff)
+      if (undone) {
+        state.lastAngelicaCancel = pending.eff
+        state.log.push(`${holder.name} gioca Anello di Angelica: annulla l'ultimo effetto giocato.`)
+      } else {
+        state.log.push(`${holder.name} gioca Anello di Angelica, ma l'ultimo effetto non era annullabile.`)
+      }
+      state.lastEffect = null
+    } else if (pending.cardId === 'palazzo_di_atlante' && targetId) {
+      redirectEffect(state, pending.eff, targetId)
+    }
     holder.revealedThisRound.push(holder.hand)
     holder.handPublic = true
   } else {
@@ -585,8 +621,17 @@ export function resolveReaction(state, activate, targetId) {
   }
   state.pendingReaction = null
   advanceHandQueue(state, pending.holderId)
-  // Riprende ad avanzare le code che erano state messe in pausa in attesa di questa decisione.
-  for (const pid of pending.pausedPlayerIds || []) advanceHandQueue(state, pid)
+
+  // Se questo era il turno dell'Anello ed e' rimasta un'eliminazione ancora in piedi
+  // (rifiutata, o l'Anello non c'entrava con quel tipo di effetto), diamo un'altra
+  // possibilita' al Palazzo di Atlante PRIMA di riprendere le code messe in pausa.
+  let chained = false
+  if (pending.cardId === 'anello_di_angelica' && state.lastEffect && state.lastEffect.effect === 'eliminate') {
+    chained = tryOfferReactive(state, 'palazzo_di_atlante', pending.pausedPlayerIds)
+  }
+  if (!chained) {
+    for (const pid of pending.pausedPlayerIds || []) advanceHandQueue(state, pid)
+  }
   return state
 }
 
