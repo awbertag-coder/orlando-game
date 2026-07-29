@@ -22,10 +22,15 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: var(--parchment);
+  background-color: #1c1611;
   background-image:
-    radial-gradient(circle at 20% 10%, rgba(185, 139, 46, 0.08), transparent 40%),
-    radial-gradient(circle at 85% 90%, rgba(158, 43, 37, 0.06), transparent 45%);
+    radial-gradient(ellipse 900px 700px at 50% -10%, rgba(185, 139, 46, 0.16), transparent 60%),
+    radial-gradient(ellipse 1000px 800px at 50% 110%, rgba(158, 43, 37, 0.14), transparent 60%),
+    radial-gradient(circle at 15% 25%, rgba(232, 205, 138, 0.05), transparent 35%),
+    radial-gradient(circle at 85% 75%, rgba(232, 205, 138, 0.04), transparent 35%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 3px),
+    linear-gradient(180deg, #241d16, #1c1611 40%, #1c1611 60%, #221a13);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: 'Crimson Text', Georgia, serif;
   font-size: 18px;
