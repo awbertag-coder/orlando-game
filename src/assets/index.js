@@ -7,11 +7,12 @@ const equipmentModules = import.meta.glob('./equipment/*.png', { eager: true, im
 const boardModules = import.meta.glob('./board/*.png', { eager: true, import: 'default' })
 const phaseModules = import.meta.glob('./phases/*.png', { eager: true, import: 'default' })
 const tableModules = import.meta.glob('./table/*.png', { eager: true, import: 'default' })
+const backgroundModules = import.meta.glob('./background/*.{png,jpg,jpeg}', { eager: true, import: 'default' })
 
 function toIdMap(modules) {
   const map = {}
   for (const path in modules) {
-    const id = path.split('/').pop().replace('.png', '')
+    const id = path.split('/').pop().replace(/\.(png|jpg|jpeg)$/, '')
     map[id] = modules[path]
   }
   return map
@@ -23,3 +24,4 @@ export const EQUIPMENT_IMAGES = toIdMap(equipmentModules) // es. EQUIPMENT_IMAGE
 export const BOARD_IMAGES = toIdMap(boardModules) // es. BOARD_IMAGES.board68_cristiana_3
 export const PHASE_IMAGES = toIdMap(phaseModules) // es. PHASE_IMAGES.chiamata_alle_armi, PHASE_IMAGES.vittoria_cristiana
 export const TABLE_IMAGES = toIdMap(tableModules) // TABLE_IMAGES.tavolo (sfondo della vista circolare del tavolo, opzionale)
+export const BACKGROUND_IMAGES = toIdMap(backgroundModules) // BACKGROUND_IMAGES.battaglia (sfondo della pagina, opzionale)

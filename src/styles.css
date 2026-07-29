@@ -22,19 +22,29 @@ html, body, #root {
 
 body {
   margin: 0;
-  background-color: #1c1611;
-  background-image:
-    radial-gradient(ellipse 900px 700px at 50% -10%, rgba(185, 139, 46, 0.16), transparent 60%),
-    radial-gradient(ellipse 1000px 800px at 50% 110%, rgba(158, 43, 37, 0.14), transparent 60%),
-    radial-gradient(circle at 15% 25%, rgba(232, 205, 138, 0.05), transparent 35%),
-    radial-gradient(circle at 85% 75%, rgba(232, 205, 138, 0.04), transparent 35%),
-    repeating-linear-gradient(45deg, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 3px),
-    linear-gradient(180deg, #241d16, #1c1611 40%, #1c1611 60%, #221a13);
+  background-color: #1c1611; /* usato finche' l'immagine di sfondo non e' caricata, o se manca */
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
   background-attachment: fixed;
   color: var(--ink);
   font-family: 'Crimson Text', Georgia, serif;
   font-size: 18px;
   line-height: 1.45;
+}
+
+/* Vignettatura semi-trasparente sopra l'immagine di sfondo, cosi' le card chiare
+   restano ben leggibili senza dover scurire l'immagine stessa. Sta dietro all'app-shell
+   (z-index piu' basso), fissa anche durante lo scroll. */
+.bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 900px 700px at 50% 0%, rgba(28, 22, 17, 0.55), transparent 65%),
+    radial-gradient(ellipse 1000px 800px at 50% 100%, rgba(28, 22, 17, 0.55), transparent 65%),
+    linear-gradient(180deg, rgba(28,22,17,0.35), rgba(28,22,17,0.55) 40%, rgba(28,22,17,0.55) 60%, rgba(28,22,17,0.4));
 }
 
 h1, h2, h3, .display {
@@ -45,6 +55,8 @@ h1, h2, h3, .display {
 }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
