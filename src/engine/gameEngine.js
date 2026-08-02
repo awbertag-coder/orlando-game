@@ -43,7 +43,9 @@ export function createGame(playerNames, options = {}) {
   // (usato dallo script di simulazione per confrontare soglie diverse).
   const ganoMarfisaSwitchRound = options.ganoMarfisaSwitchRound || (n < 9 ? 6 : 7)
 
-  const charIds = shuffle(getRosterForPlayerCount(n))
+  // Solo per test di bilanciamento: sostituisce il roster normale con uno scelto a mano.
+  // Non tocca il comportamento normale del gioco (nessuna chiamata reale la usa).
+  const charIds = shuffle(options.rosterOverride || getRosterForPlayerCount(n))
   const players = playerNames.map((name, i) => {
     const char = CHARACTERS_ALL[charIds[i]]
     // Isabella non appartiene a nessuna delle due fazioni (resta sempre neutrale).

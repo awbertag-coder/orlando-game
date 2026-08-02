@@ -12,7 +12,7 @@ export const PHASE_TRANSITIONS = {
   },
   rivelazione: {
     image: 'rivelazione', eyebrow: 'Fase 1 \u2014 Rivelazione', title: 'Uno scambio silenzioso',
-    rules: "Si gioca solo con 8 o piu' giocatori. Nessuna scelta da fare: Orlando e Agramante vedono l'elenco dei propri alleati di fazione; Angelica scopre chi e' Medoro; Ruggero scopre chi e' Bradamante."
+    rules: "Si gioca solo con 8 o piu' giocatori. Nessuna scelta da fare: Orlando e Agramante vedono l'elenco dei propri alleati di fazione. Sul tabellone da 9 o piu' giocatori, dove sono presenti, anche Angelica scopre chi e' Medoro e Ruggero scopre chi e' Bradamante."
   },
   alavventura: {
     image: 'alavventura', eyebrow: "Fase 2 \u2014 All'avventura", title: 'Ogni cavaliere gioca la propria carta',

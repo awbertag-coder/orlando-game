@@ -81,7 +81,7 @@ export const CHARACTERS_ALL = {
 export const CHARACTERS_6 = CHARACTERS_ALL
 
 // Configurazione del mazzo di personaggi da usare per 6 giocatori (roster fisso).
-export const SIX_PLAYER_SETUP = ['orlando', 'agramante', 'angelica', 'ruggero', 'bradamante', 'medoro']
+export const SIX_PLAYER_SETUP = ['orlando', 'agramante', 'rinaldo', 'ferrau', 'astolfo', 'rodomonte']
 
 // Coppie di personaggi "speculari" (stessa coppia, fazioni opposte). Per 10+ giocatori
 // si aggiungono sempre a coppie intere, mai un singolo senza il suo speculare.
@@ -110,8 +110,35 @@ export function fillGanoMarfisaDescription(description, switchRound) {
   return description.replace('{{turno}}', ordinale)
 }
 
+// Usata dalla lobby online per mostrare in anticipo quali personaggi sono certi e quali
+// solo possibili, in base al numero di giocatori scelto (nessuna partita ancora creata).
+// possiblePairs elenca le coppie speculari ancora da decidere: a 7 giocatori ne appare UNA
+// sola tra le due (Gano O Marfisa), da 10 in su ne appaiono ALCUNE per intero (scelte a
+// caso tra tutte quelle elencate).
+export function getRosterPreview(n) {
+  const base = ['orlando', 'agramante', 'rinaldo', 'ferrau', 'astolfo', 'rodomonte']
+  if (n === 6) return { fixed: base, possiblePairs: [] }
+  if (n === 7) return { fixed: base, possiblePairs: [['gano', 'marfisa']] }
+  if (n === 8) return { fixed: [...base, 'gano', 'marfisa'], possiblePairs: [] }
+  if (n === 9) {
+    return {
+      fixed: ['orlando', 'agramante', 'angelica', 'ruggero', 'bradamante', 'medoro', 'astolfo', 'rodomonte', 'isabella'],
+      possiblePairs: []
+    }
+  }
+  const fixed = ['orlando', 'agramante']
+  if (n % 2 !== 0) fixed.push('isabella')
+  return { fixed, possiblePairs: CHARACTER_PAIRS.map(pair => [...pair]) }
+}
+
 export function getRosterForPlayerCount(n) {
-  const base = ['orlando', 'agramante', 'angelica', 'ruggero', 'bradamante', 'medoro']
+  // Angelica/Ruggero (si riconoscono in Fase 1, che pero' esiste solo da 8 giocatori in su) e
+  // Bradamante/Medoro (il loro potere si attiva solo con "Cercare l'amore", che esiste solo sul
+  // tabellone 9+) non avevano mai modo di far scattare il proprio potere qui. Sostituiti con
+  // Rinaldo/Ferrau' (immuni in battaglia) e Astolfo/Rodomonte (favore raddoppiato), che
+  // funzionano sempre, a qualunque numero di giocatori. Testato con simulazioni a bot prima di
+  // renderlo effettivo (vedi tools/simulate-roster-6-8.mjs).
+  const base = ['orlando', 'agramante', 'rinaldo', 'ferrau', 'astolfo', 'rodomonte']
   if (n === 6) return [...base]
   if (n === 7) return [...base, Math.random() < 0.5 ? 'gano' : 'marfisa']
   if (n === 8) return [...base, 'gano', 'marfisa']

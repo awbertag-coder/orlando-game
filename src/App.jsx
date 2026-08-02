@@ -36,6 +36,26 @@ export default function App() {
             e chi restera' fedele solo a se stesso fino alla fine.
           </p>
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <a
+            href="/regolamento.pdf"
+            download="Orlando_alle_Crociate_Regolamento.pdf"
+            className="btn-link"
+            style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.7)' }}
+          >
+            &#128214; Scarica il regolamento (PDF)
+          </a>
+          <div style={{ marginTop: 8 }}>
+            <a
+              href="/regolamento.docx"
+              download="Orlando_alle_Crociate_Regolamento.docx"
+              style={{ color: '#fff', fontSize: '0.8em', textDecoration: 'underline' }}
+            >
+              versione Word (.docx)
+            </a>
+          </div>
+        </div>
       </div>
     )
   }

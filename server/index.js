@@ -25,21 +25,27 @@ function getOrCreateRoom(roomCode, requiredPlayers, useEquipment) {
       const bots = Array.from({ length: 5 }, (_, i) => ({
         token: crypto.randomUUID(), name: `Bot ${i + 1}`, socketId: null, connected: true, playerId: null, isBot: true
       }))
-      rooms[roomCode] = { players: bots, supervisors: [], requiredPlayers: 6, useEquipment: true, game: null, voiceLink: null }
+      rooms[roomCode] = { players: bots, supervisors: [], requiredPlayers: 6, useEquipment: true, game: null, voiceLink: null, confirmedStart: new Set() }
     } else {
-      rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null, voiceLink: null }
+      rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null, voiceLink: null, confirmedStart: new Set() }
     }
   }
   return rooms[roomCode]
 }
 
 function lobbyPayload(room) {
+  const full = room.players.length >= room.requiredPlayers
   return {
     players: room.players.map(p => ({ name: p.name, connected: p.connected })),
     required: room.requiredPlayers,
     useEquipment: room.useEquipment,
     started: !!room.game,
-    voiceLink: room.voiceLink || null
+    voiceLink: room.voiceLink || null,
+    // La stanza e' piena ma la partita non parte finche' non confermano tutti (vedi
+    // 'confirmStart'): qui si manda solo l'elenco dei NOMI di chi ha gia' confermato, mai i
+    // token (altrimenti un giocatore potrebbe rubare l'identita' di un altro nella stanza).
+    full,
+    confirmedNames: full ? room.players.filter(p => room.confirmedStart.has(p.token)).map(p => p.name) : []
   }
 }
 
@@ -341,19 +347,38 @@ function clearReactionTimeout(room) {
   }
 }
 
-function startGameIfReady(roomCode) {
+// Chiamata dei veri campi da compilare quando la partita comincia sul serio (dopo che
+// tutti, umani e bot, hanno confermato -- vedi tryAdvanceLobby).
+function actuallyStartGame(roomCode) {
   const room = rooms[roomCode]
-  if (!room.game && room.players.length === room.requiredPlayers) {
-    const names = room.players.map(p => p.name)
-    room.game = engine.createGame(names, { useEquipment: room.useEquipment })
-    room.players.forEach((p, i) => { p.playerId = room.game.players[i].id })
-    if (!room.game.needsPhase1) {
-      engine.startRound(room.game)
-      engine.resolveNextAutomaticInstants(room.game)
-      maybeAdvanceToVoluntary(room.game)
-    }
+  if (!room || room.game) return
+  const names = room.players.map(p => p.name)
+  room.game = engine.createGame(names, { useEquipment: room.useEquipment })
+  room.players.forEach((p, i) => { p.playerId = room.game.players[i].id })
+  if (!room.game.needsPhase1) {
+    engine.startRound(room.game)
+    engine.resolveNextAutomaticInstants(room.game)
+    maybeAdvanceToVoluntary(room.game)
+  }
+  broadcastLobby(roomCode)
+  broadcastState(roomCode)
+}
+
+// Quando la stanza si riempie, la partita NON parte piu' da sola: si aspetta che ogni
+// giocatore prema "Sono pronto, inizia!" dopo aver visto in anteprima i personaggi possibili
+// per questo numero di giocatori. I fantasmi della stanza BOT confermano da soli, all'istante,
+// appena la stanza si riempie -- non c'e' nessuno che debba aspettarli.
+function tryAdvanceLobby(roomCode) {
+  const room = rooms[roomCode]
+  if (!room || room.game) return
+  if (room.players.length !== room.requiredPlayers) return
+  for (const p of room.players) {
+    if (p.isBot) room.confirmedStart.add(p.token)
+  }
+  if (room.confirmedStart.size >= room.requiredPlayers) {
+    actuallyStartGame(roomCode)
+  } else {
     broadcastLobby(roomCode)
-    broadcastState(roomCode)
   }
 }
 
@@ -393,7 +418,7 @@ io.on('connection', (socket) => {
       socket.emit('state', redactForViewer(room.game, player.playerId))
     }
 
-    startGameIfReady(roomCode)
+    tryAdvanceLobby(roomCode)
   })
 
   // Un dispositivo puo' collegarsi come "supervisore": vede tutto, ma non e' un
@@ -562,6 +587,20 @@ io.on('connection', (socket) => {
     if (room.game) broadcastState(roomCode)
   })
 
+  // Un giocatore conferma di aver visto l'anteprima dei personaggi possibili ed essere
+  // pronto a cominciare. La partita parte solo quando l'hanno fatto tutti (vedi
+  // tryAdvanceLobby); i fantasmi della stanza BOT lo fanno gia' da soli.
+  socket.on('confirmStart', () => {
+    const roomCode = socket.data.roomCode
+    const token = socket.data.token
+    if (!roomCode || !token || !rooms[roomCode]) return
+    const room = rooms[roomCode]
+    if (room.game || room.players.length !== room.requiredPlayers) return
+    if (!findPlayerByToken(room, token)) return
+    room.confirmedStart.add(token)
+    tryAdvanceLobby(roomCode)
+  })
+
   // Chiude definitivamente la stanza (solo a partita conclusa): usata dal pulsante
   // "Chiudi partita" nella schermata finale. Notifica tutti i client collegati (giocatori
   // e supervisori) cosi' tornano automaticamente alla schermata di selezione modalita'.
@@ -587,6 +626,9 @@ io.on('connection', (socket) => {
     } else if (!room.game) {
       const token = socket.data.token
       room.players = room.players.filter(p => p.token !== token)
+      // La composizione della stanza e' cambiata: le conferme date finora non hanno piu'
+      // senso (magari serve un'altra persona, magari il roster possibile cambia).
+      room.confirmedStart.clear()
       broadcastLobby(roomCode)
     } else {
       return // partita gia' iniziata: non si puo' lasciare da qui

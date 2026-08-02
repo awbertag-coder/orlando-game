@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { EQUIPMENT_BY_ID } from './engine/equipment.js'
-import { EQUIPMENT_IMAGES } from './assets/index.js'
+import { getRosterPreview, CHARACTERS_ALL } from './engine/characters.js'
+import { EQUIPMENT_IMAGES, CHARACTER_IMAGES } from './assets/index.js'
 import { Divider, FactionBadge, HoldToPeekCharacter, BoardView, BoardPowersPanel, LogPanel, TableView, SuspicionBoard, FullPlayersTable, PhaseTransition, usePhaseTransitionGate, PhaseRulesButton, describeEffect } from './shared/ui.jsx'
 
 function getServerUrl() {
@@ -91,6 +92,7 @@ export default function OnlineApp({ onExitToMenu }) {
   const act = (type, payload = {}) => socket.emit('action', { type, payload })
   const setVoiceLink = (url) => socket.emit('setVoiceLink', { url })
   const closeRoomAndExit = () => socket.emit('closeRoom')
+  const confirmStart = () => socket.emit('confirmStart')
 
   if (connError) {
     return <div className="card"><div className="eyebrow">Connessione</div><p>{connError}</p></div>
@@ -128,6 +130,7 @@ export default function OnlineApp({ onExitToMenu }) {
         lobby={lobby}
         roomCode={roomCode}
         onSetVoiceLink={setVoiceLink}
+        onConfirmStart={confirmStart}
         onLeave={() => {
           socket.emit('leaveRoom')
           localStorage.removeItem('orlando_token')
@@ -328,7 +331,9 @@ function CouncilPanel({ messages, readyIds, myId, players, onSend, onSetReady })
   )
 }
 
-function LobbyScreen({ lobby, roomCode, onLeave, onSetVoiceLink }) {
+function LobbyScreen({ lobby, roomCode, onLeave, onSetVoiceLink, onConfirmStart }) {
+  const [confirmed, setConfirmed] = useState(false)
+
   if (!lobby) {
     return (
       <div className="card">
@@ -337,21 +342,101 @@ function LobbyScreen({ lobby, roomCode, onLeave, onSetVoiceLink }) {
       </div>
     )
   }
+
+  const full = lobby.full
+  const confirmedCount = lobby.confirmedNames?.length || 0
+
   return (
     <div className="card">
       <div className="eyebrow">Stanza {roomCode}</div>
-      <h2>In attesa degli altri cavalieri&hellip;</h2>
+      {full ? <h2>Pronti a cominciare?</h2> : <h2>In attesa degli altri cavalieri&hellip;</h2>}
       <p>{lobby.players.length} / {lobby.required} giocatori collegati</p>
       <div className="player-list">
         {lobby.players.map((p, i) => (
-          <div key={i} className="card" style={{ margin: 0, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
+          <div key={i} className="card" style={{ margin: 0, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{p.name}</span>
-            <span style={{ color: p.connected ? 'var(--saracen)' : 'var(--crimson)' }}>{p.connected ? '\u25CF online' : '\u25CB offline'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {full && lobby.confirmedNames?.includes(p.name) && <span title="Pronto" style={{ color: 'var(--saracen)' }}>&#10003; pronto</span>}
+              <span style={{ color: p.connected ? 'var(--saracen)' : 'var(--crimson)' }}>{p.connected ? '\u25CF online' : '\u25CB offline'}</span>
+            </span>
           </div>
         ))}
       </div>
+
+      {full && (
+        <>
+          <Divider />
+          <RosterPreview playerCount={lobby.required} />
+          <p style={{ color: 'var(--ink-soft)', fontSize: '0.85em' }}>
+            {confirmedCount}/{lobby.required} pronti a cominciare.
+          </p>
+          <button
+            disabled={confirmed}
+            onClick={() => { setConfirmed(true); onConfirmStart() }}
+          >
+            {confirmed ? 'In attesa degli altri…' : 'Sono pronto, inizia!'}
+          </button>
+        </>
+      )}
+
       <VoiceLinkPanel voiceLink={lobby.voiceLink} onSetVoiceLink={onSetVoiceLink} compact />
       <button className="secondary" style={{ marginTop: 14 }} onClick={onLeave}>Lascia il tavolo</button>
+    </div>
+  )
+}
+
+// Mostra in anteprima, prima che la partita cominci, quali personaggi sono certi e quali solo
+// possibili per il numero di giocatori scelto -- cosi' chi si unisce sa gia' a grandi linee
+// cosa aspettarsi prima di premere "Sono pronto".
+function RosterPreview({ playerCount }) {
+  const { fixed, possiblePairs } = getRosterPreview(playerCount)
+  const isSinglePairCase = possiblePairs.length === 1
+
+  return (
+    <div style={{ margin: '10px 0' }}>
+      <div className="eyebrow">Personaggi sicuri</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', margin: '8px 0 14px' }}>
+        {fixed.map(id => <CharacterTile key={id} characterId={id} />)}
+      </div>
+
+      {possiblePairs.length > 0 && (
+        <>
+          <div className="eyebrow">
+            {isSinglePairCase ? 'Uno dei due (a caso)' : 'Personaggi possibili (a coppie, scelte a caso)'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', margin: '8px 0' }}>
+            {possiblePairs.map(([a, b], i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <CharacterTile characterId={a} dimmed />
+                <span style={{ color: 'var(--ink-soft)', fontSize: '0.8em' }}>{isSinglePairCase ? 'o' : '+'}</span>
+                <CharacterTile characterId={b} dimmed />
+              </div>
+            ))}
+          </div>
+          <p style={{ color: 'var(--ink-soft)', fontSize: '0.8em', textAlign: 'center' }}>
+            {isSinglePairCase
+              ? 'Solo uno dei due sara\' davvero in partita.'
+              : 'Solo alcune di queste coppie (sempre intere) saranno davvero in partita.'}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+function CharacterTile({ characterId, dimmed = false }) {
+  const char = CHARACTERS_ALL[characterId]
+  if (!char) return null
+  return (
+    <div style={{ textAlign: 'center', width: 64, opacity: dimmed ? 0.75 : 1 }}>
+      {CHARACTER_IMAGES[characterId] && (
+        <img
+          src={CHARACTER_IMAGES[characterId]}
+          alt={char.name}
+          style={{ width: '100%', borderRadius: 'var(--radius)', border: '1px solid var(--parchment-dark)', display: 'block' }}
+        />
+      )}
+      <div style={{ fontSize: '0.7em', marginTop: 2 }}>{char.name}</div>
     </div>
   )
 }

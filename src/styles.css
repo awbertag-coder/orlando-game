@@ -226,6 +226,24 @@ button.secondary {
 }
 button.secondary:hover { background: rgba(43,36,32,0.06); }
 
+/* Cosi' un link <a> puo' avere lo stesso aspetto di button.secondary (es. il download del
+   regolamento nella schermata iniziale): serve perche' le regole sopra si applicano solo ai
+   <button>, non ai link. */
+a.btn-link {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85em;
+  letter-spacing: 0.03em;
+  display: inline-block;
+  background: transparent;
+  border: 1px solid var(--ink-soft);
+  border-radius: var(--radius);
+  padding: 13px 18px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+a.btn-link:hover { background: rgba(43,36,32,0.06); }
+
 button.gold {
   background: var(--gold);
   color: var(--ink);
