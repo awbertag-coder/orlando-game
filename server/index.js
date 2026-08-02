@@ -2,6 +2,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import crypto from 'crypto'
 import * as engine from '../src/engine/gameEngine.js'
+import { EQUIPMENT_BY_ID } from '../src/engine/equipment.js'
 import { redactForViewer, redactForSupervisor } from './redact.js'
 
 const PORT = process.env.PORT || 3001
@@ -17,7 +18,17 @@ const rooms = {}
 
 function getOrCreateRoom(roomCode, requiredPlayers, useEquipment) {
   if (!rooms[roomCode]) {
-    rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null, voiceLink: null }
+    // Stanza speciale "BOT": per testare la modalita' online senza dover radunare 6 persone
+    // vere. Si popola subito con 5 giocatori fantasma (nessun socket, decidono da soli) e
+    // basta che una sola persona vera si unisca per far partire la partita.
+    if (roomCode === 'BOT') {
+      const bots = Array.from({ length: 5 }, (_, i) => ({
+        token: crypto.randomUUID(), name: `Bot ${i + 1}`, socketId: null, connected: true, playerId: null, isBot: true
+      }))
+      rooms[roomCode] = { players: bots, supervisors: [], requiredPlayers: 6, useEquipment: true, game: null, voiceLink: null }
+    } else {
+      rooms[roomCode] = { players: [], supervisors: [], requiredPlayers: requiredPlayers || 6, useEquipment: useEquipment !== false, game: null, voiceLink: null }
+    }
   }
   return rooms[roomCode]
 }
@@ -56,7 +67,7 @@ function broadcastOpenRooms() {
   io.emit('openRooms', getOpenRoomsList())
 }
 
-function broadcastState(roomCode) {
+function _broadcastState(roomCode) {
   const room = rooms[roomCode]
   if (!room || !room.game) return
   for (const p of room.players) {
@@ -66,6 +77,174 @@ function broadcastState(roomCode) {
   for (const socketId of room.supervisors) {
     io.to(socketId).emit('supervisorState', { ...redactForSupervisor(room.game), voiceLink: room.voiceLink || null })
   }
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+function shuffle(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } return a }
+const NEEDS_TARGET_VOLUNTARY = ['eliminate_choice', 'eliminate_adjacent', 'eliminate_draw_on_success', 'steal_equipment']
+
+function isBot(room, playerId) {
+  return !!room.players.find(p => p.playerId === playerId)?.isBot
+}
+
+// Compie UNA sola decisione per un giocatore fantasma, se in questo momento tocca proprio a
+// uno di loro (istantanea, volontaria, bersaglio di un'interruzione/reazione, partecipanti,
+// blocco fantasma, rivelazione favore, potere del tabellone). Ritorna true se ha agito (cosi'
+// il chiamante puo' richiamarla per far avanzare la catena finche' non tocca a un umano).
+// "Prossimo round" resta SEMPRE all'umano: i bot non lo premono mai, per non forzargli il
+// ritmo sulle schermate di risultato.
+function stepBotAction(room, roomCode) {
+  const state = room.game
+  if (!state || state.phase === 'gameover') return false
+
+  if (state.phase === 'phase1-reveal') {
+    const notAcked = state.players.find(p => !state.phase1Acked.includes(p.id) && isBot(room, p.id))
+    if (notAcked) { engine.ackPhase1(state, notAcked.id); return true }
+    return false
+  }
+
+  // Ricontrollato ad ogni passo (non solo dopo una decisione volontaria): l'ultima carta a
+  // sbloccare "tutti pronti" puo' arrivare anche dal giro delle istantanee (es. una carta
+  // extra pescata in coda), che altrimenti non lo ricontrollerebbe mai da solo.
+  maybeAdvanceToSelection(state)
+
+  // I fantasmi non attivano mai di propria iniziativa Parata/Orrilo/Anello/Palazzo: rispondono
+  // sempre "no", subito, senza aspettare il timer (che resta solo per gli umani).
+  if (state.pendingInterrupt && isBot(room, state.pendingInterrupt.targetId)) {
+    clearInterruptTimeout(room)
+    engine.resolveInterrupt(state, false)
+    maybeAdvanceToSelection(state)
+    return true
+  }
+  if (state.pendingReaction && isBot(room, state.pendingReaction.holderId)) {
+    clearReactionTimeout(room)
+    engine.resolveReaction(state, false)
+    maybeAdvanceToSelection(state)
+    return true
+  }
+
+  if (state.phase === 'phase2-instant') {
+    const player = engine.instantCardsPending(state)[0]
+    if (player && isBot(room, player.id)) {
+      const card = EQUIPMENT_BY_ID[player.hand]
+      let payload = {}
+      if (card.needsTarget === 2) {
+        const others = shuffle(state.players.filter(p => p.id !== player.id))
+        payload = { targetId: others[0].id, targetId2: others[1].id }
+      } else if (card.needsTarget === 1) {
+        const others = state.players.filter(p => p.id !== player.id)
+        payload = { targetId: pick(others).id }
+      }
+      engine.resolveInstantCard(state, player.id, payload)
+      return true
+    }
+    return false
+  }
+
+  if (state.phase === 'phase2-voluntary') {
+    const player = engine.voluntaryCardsPending(state)[0]
+    if (player && isBot(room, player.id)) {
+      const card = EQUIPMENT_BY_ID[player.hand]
+      const needsTarget = NEEDS_TARGET_VOLUNTARY.includes(card.effect)
+      let played = false
+      if (card.timing === 'voluntary' && Math.random() < 0.5) {
+        if (needsTarget) {
+          const others = state.players.filter(p => p.id !== player.id && !p.eliminatedPermanently)
+          if (others.length) { engine.playVoluntaryCard(state, player.id, { targetId: pick(others).id }); played = true }
+        } else {
+          engine.playVoluntaryCard(state, player.id, {}); played = true
+        }
+      }
+      if (!played) engine.passVoluntaryCard(state, player.id)
+      engine.setCouncilReady(state, player.id, true)
+      maybeAdvanceToSelection(state)
+      return true
+    }
+    return false
+  }
+
+  if (state.phase === 'phase3-select') {
+    const holder = state.players.find(p => p.hasDurindana)
+    if (isBot(room, holder.id)) {
+      const forced = engine.forcedParticipants(state)
+      const eligible = engine.eligibleParticipants(state)
+      const requiredTotal = Math.min(state.participantsBaseline + forced.length, eligible.length)
+      const selected = [...forced]
+      const pool = shuffle(eligible.filter(id => !forced.includes(id)))
+      while (selected.length < requiredTotal && pool.length) selected.push(pool.pop())
+      engine.chooseParticipants(state, selected, engine.canSecretlyJoin(state) && Math.random() < 0.3)
+      return true
+    }
+    return false
+  }
+
+  if (state.phase === 'phase3-ghost-block') {
+    const ghostId = (state.pendingGhostBlocks || [])[0]
+    if (ghostId && isBot(room, ghostId)) { engine.ghostBlock(state, ghostId, null); return true }
+    return false
+  }
+
+  if (state.phase === 'phase3-reveal') {
+    const pendingId = state.battle.participants.find(id => !state.battle.reveals[id] && isBot(room, id))
+    if (pendingId) {
+      const p = state.players.find(x => x.id === pendingId)
+      const factions = [...new Set(p.favorTiles.map(t => t.faction))]
+      engine.revealParticipant(state, pendingId, pick(factions), {})
+      if (state.battle.participants.every(id => state.battle.reveals[id]) && !room.battleResolveTimer) {
+        room.battleResolveTimer = setTimeout(() => {
+          room.battleResolveTimer = null
+          engine.resolveBattle(state)
+          engine.applyBoardResult(state)
+          broadcastState(roomCode)
+        }, 5000)
+      }
+      return true
+    }
+    return false
+  }
+
+  if (state.phase === 'phase4') {
+    const power = engine.currentBoardPower(state)
+    if (!power) return false // "prossimo round" resta sempre all'umano
+    const holder = state.players.find(p => p.hasDurindana)
+    if (power.type === 'spie_a_palazzo' && isBot(room, holder.id)) {
+      const others = state.players.filter(p => p.id !== holder.id)
+      engine.resolveSpiePalazzo(state, pick(others).id)
+      return true
+    }
+    if (power.type === 'cercare_amore') {
+      const info = engine.cercareAmoreInfo(state)
+      if (!info) { state.pendingBoardPowers.shift(); return true }
+      if (isBot(room, info.seekerPlayerId)) {
+        const targets = state.players.filter(p => p.id !== info.seekerPlayerId)
+        engine.resolveCercareAmore(state, pick(targets).id)
+        return true
+      }
+    }
+    if (power.type === 'fendente_mortale' && isBot(room, holder.id)) {
+      const others = state.players.filter(p => p.id !== holder.id)
+      engine.resolveFendenteMortale(state, pick(others).id)
+      return true
+    }
+    return false
+  }
+
+  return false
+}
+
+function runBotActions(roomCode) {
+  const room = rooms[roomCode]
+  if (!room || !room.game) return
+  let guard = 0
+  while (stepBotAction(room, roomCode) && guard < 200) guard++
+}
+
+// Fa avanzare prima tutte le decisioni che spettano ai giocatori fantasma (se la stanza ne
+// ha), poi manda lo stato come sempre. Cosi' l'unico punto di aggancio serve per tutti i punti
+// del server che gia' chiamavano broadcastState (fine di un'azione, timer scaduti, ecc.).
+function broadcastState(roomCode) {
+  runBotActions(roomCode)
+  _broadcastState(roomCode)
 }
 
 function findPlayerByToken(room, token) {
@@ -271,6 +450,7 @@ io.on('connection', (socket) => {
           const pending = engine.instantCardsPending(state)
           if (pending[0]?.id !== myId) return
           engine.resolveInstantCard(state, myId, payload)
+          maybeAdvanceToSelection(state)
           break
         }
         case 'playVoluntary': {
@@ -357,6 +537,7 @@ io.on('connection', (socket) => {
       }
       engine.resolveNextAutomaticInstants(state)
       maybeAdvanceToVoluntary(state)
+      maybeAdvanceToSelection(state)
       if (state.pendingInterrupt) scheduleInterruptTimeout(roomCode)
       if (state.pendingReaction) scheduleReactionTimeout(roomCode)
       broadcastState(roomCode)

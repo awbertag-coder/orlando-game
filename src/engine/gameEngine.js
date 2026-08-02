@@ -199,6 +199,7 @@ function attemptElimination(state, { attackerId = null, targetId, field, drawCar
     target.revealedThisRound.push('atlante')
     target.handPublic = true
     target.immuneAll = true
+    setCouncilReady(state, target.id, true)
     state.log.push(`${target.name} rivela Atlante: e' immune da qualsiasi effetto, anche in futuro.`)
     return
   }
@@ -341,6 +342,12 @@ export function resolveInstantCard(state, playerId, targets = {}) {
   player.revealedThisRound.push(card.id)
   player.handPublic = true
   state.log.push(`${player.name} rivela ${card.name}.`)
+  // FIX: mancava qui (in un unico punto, valido per tutti i percorsi: azione esplicita,
+  // risoluzione automatica, hotseat, bot). Senza questo, un giocatore online con una carta
+  // istantanea in mano non risultava mai "pronto" nel Consiglio, e la Fase 3 non partiva
+  // mai (bloccava la partita in silenzio). L'hotseat ignora questo campo, quindi il fix
+  // e' innocuo li'.
+  setCouncilReady(state, playerId, true)
 
   switch (card.effect) {
     case 'swap_equipment': {
@@ -395,11 +402,20 @@ export function resolveInstantCard(state, playerId, targets = {}) {
 
 // Se il giocatore ha carte extra in coda (da Borsa di Logistilla, Caligorante, o un
 // pescaggio bonus), la prossima passa a essere la sua "mano corrente" da risolvere.
+// FIX: se quella carta e' di tipo istantaneo mentre si e' gia' in Fase 2 volontaria (puo'
+// succedere: l'extra si pesca DOPO che le istantanee sono gia' state smaltite), va risolta
+// come istantanea, non lasciata cadere nel giro volontario (dove finirebbe scartata in
+// silenzio, dato che li' non e' "giocabile"). Si torna quindi alla fase istantanea: la
+// stessa logica gia' esistente (server/hotseat/bot) la fara' avanzare di nuovo appena
+// risolta, senza bisogno di codice apposito altrove.
 function advanceHandQueue(state, playerId) {
   const player = getPlayer(state, playerId)
   if (player.extraQueue && player.extraQueue.length > 0) {
     player.hand = player.extraQueue.shift()
     player.handPublic = false
+    if (EQUIPMENT_BY_ID[player.hand]?.timing === 'instant' && state.phase === 'phase2-voluntary') {
+      state.phase = 'phase2-instant'
+    }
   }
 }
 
@@ -710,7 +726,10 @@ export function setCouncilReady(state, playerId, ready) {
 }
 
 export function allCouncilReady(state) {
-  return state.players.length > 0 && state.players.every(p => (state.councilReady || []).includes(p.id))
+  // Un giocatore senza carta in mano (es. gliel'ha rubata Caligorante) non ha nulla da
+  // decidere: conta come "pronto" a prescindere, altrimenti nessun codice lo segnerebbe mai
+  // e la Fase 3 non partirebbe piu'.
+  return state.players.length > 0 && state.players.every(p => !p.hand || (state.councilReady || []).includes(p.id))
 }
 
 export function beginParticipantSelection(state) {
