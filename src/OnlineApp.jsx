@@ -21,7 +21,7 @@ function useSocket() {
   return socketRef.current
 }
 
-export default function OnlineApp() {
+export default function OnlineApp({ onExitToMenu }) {
   const socket = useSocket()
   const [connError, setConnError] = useState(null)
   const [joinError, setJoinError] = useState(null)
@@ -57,6 +57,14 @@ export default function OnlineApp() {
     socket.on('supervisorJoinError', (msg) => setSupervisorError(msg))
     socket.on('supervisorState', (payload) => setSupervisorState(payload))
     socket.on('openRooms', (payload) => setOpenRooms(payload))
+    socket.on('roomClosed', () => {
+      localStorage.removeItem('orlando_token')
+      localStorage.removeItem('orlando_room')
+      setJoined(false)
+      setLobby(null)
+      setState(null)
+      onExitToMenu && onExitToMenu()
+    })
 
     const savedToken = localStorage.getItem('orlando_token')
     const savedRoom = localStorage.getItem('orlando_room')
@@ -76,11 +84,13 @@ export default function OnlineApp() {
       socket.off('supervisorJoinError')
       socket.off('supervisorState')
       socket.off('openRooms')
+      socket.off('roomClosed')
     }
   }, [socket])
 
   const act = (type, payload = {}) => socket.emit('action', { type, payload })
   const setVoiceLink = (url) => socket.emit('setVoiceLink', { url })
+  const closeRoomAndExit = () => socket.emit('closeRoom')
 
   if (connError) {
     return <div className="card"><div className="eyebrow">Connessione</div><p>{connError}</p></div>
@@ -130,7 +140,7 @@ export default function OnlineApp() {
     )
   }
 
-  return <GameScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={() => setSecretInfo(null)} onSetVoiceLink={setVoiceLink} />
+  return <GameScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={() => setSecretInfo(null)} onSetVoiceLink={setVoiceLink} onCloseRoom={closeRoomAndExit} />
 }
 
 function SupervisorScreen({ state, roomCode }) {
@@ -252,7 +262,7 @@ function VoiceLinkPanel({ voiceLink, onSetVoiceLink, compact }) {
 // Il "Consiglio dei cavalieri" lato online: pannello persistente durante la Fase 2,
 // non una fase a se'. Qui l'autore del commento e' implicito (sei tu, un dispositivo
 // a testa), a differenza dell'hotseat dove va scelto da un elenco.
-function CouncilPanel({ messages, readyIds, myId, totalPlayers, onSend, onSetReady }) {
+function CouncilPanel({ messages, readyIds, myId, players, onSend, onSetReady }) {
   const [draft, setDraft] = useState('')
   const amReady = readyIds.includes(myId)
   return (
@@ -296,7 +306,23 @@ function CouncilPanel({ messages, readyIds, myId, totalPlayers, onSend, onSetRea
         >
           {amReady ? '\u2713 Pronto per la Chiamata alle armi' : 'Ho finito: sono pronto'}
         </button>
-        <span style={{ fontSize: '0.85em', color: 'var(--ink-soft)' }}>{readyIds.length}/{totalPlayers} pronti</span>
+      </div>
+      <div className="player-list" style={{ marginTop: 10 }}>
+        {players.map(p => {
+          const isReady = readyIds.includes(p.id)
+          return (
+            <div key={p.id} className="card" style={{ margin: 0, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{p.name}{p.id === myId ? ' (tu)' : ''}</span>
+              <span
+                title={isReady ? 'Pronto' : 'Non ancora pronto'}
+                style={{
+                  display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
+                  background: isReady ? 'var(--saracen)' : 'var(--crimson)'
+                }}
+              />
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -339,6 +365,26 @@ function WaitingCard({ text }) {
   )
 }
 
+// Avviso "X ha usato [carta] contro di te": appare in cima a qualunque schermata (anche
+// durante una finestra di interruzione/reazione) e si chiude da solo dopo qualche secondo.
+function TargetNoticeToast({ notice, onDismiss }) {
+  if (!notice) return null
+  const card = EQUIPMENT_BY_ID[notice.cardId]
+  if (!card) return null
+  return (
+    <div className="card target-notice-toast">
+      <div className="eyebrow">Sei stato bersagliato</div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {EQUIPMENT_IMAGES[card.id] && <img className="card-art" style={{ width: 70, height: 'auto', flexShrink: 0 }} src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
+        <p style={{ margin: 0, flex: 1 }}>
+          <strong>{notice.attackerName || 'Qualcuno'}</strong> ha usato <strong>{card.name}</strong> contro di te.
+        </p>
+      </div>
+      <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={onDismiss}>Chiudi</button>
+    </div>
+  )
+}
+
 function nameOf(state, id) {
   return state.players.find(p => p.id === id)?.name || '?'
 }
@@ -368,7 +414,7 @@ function transitionKeyForOnline(state) {
   return null
 }
 
-function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink }) {
+function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, onCloseRoom }) {
   const me = state.players.find(p => p.id === state.myId)
   const [showTable, setShowTable] = useState(true)
   const [showBoard, setShowBoard] = useState(false)
@@ -377,6 +423,19 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
   const [assegnazioneSeen, setAssegnazioneSeen] = useState(false)
   const transitionKey = transitionKeyForOnline(state)
   const { showTransition, dismiss } = usePhaseTransitionGate(transitionKey)
+
+  // Avviso "X ha usato [carta] contro di te": si mostra una volta sola per ogni evento
+  // (deduplicato tramite il numero progressivo "seq" mandato dal server) e sparisce da solo.
+  const [seenNoticeSeq, setSeenNoticeSeq] = useState(0)
+  const [visibleNotice, setVisibleNotice] = useState(null)
+  React.useEffect(() => {
+    if (state.targetNotice && state.targetNotice.seq > seenNoticeSeq) {
+      setVisibleNotice(state.targetNotice)
+      setSeenNoticeSeq(state.targetNotice.seq)
+      const t = setTimeout(() => setVisibleNotice(null), 7000)
+      return () => clearTimeout(t)
+    }
+  }, [state.targetNotice?.seq])
 
   if (!assegnazioneSeen) {
     return <PhaseTransition phaseKey="assegnazione" onContinue={() => setAssegnazioneSeen(true)} />
@@ -395,6 +454,12 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
         </h1>
         <BoardView game={state} />
         <PhaseRulesButton phaseKey={`vittoria_${state.winner}`} />
+        <button type="button" style={{ marginTop: 14 }} onClick={onCloseRoom}>
+          Chiudi la partita e torna alla selezione modalita'
+        </button>
+        <p style={{ color: 'var(--ink-soft)', fontSize: '0.8em', marginTop: 8 }}>
+          Chiude la stanza per tutti i giocatori.
+        </p>
       </div>
     )
   }
@@ -404,9 +469,10 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
     const target = state.players.find(p => p.id === state.pendingInterrupt.targetId)
     return (
       <div>
+        <TargetNoticeToast notice={visibleNotice} onDismiss={() => setVisibleNotice(null)} />
         {state.pendingInterrupt.actionableByMe
           ? <MyInterruptResponse me={me} act={act} deadline={state.pendingInterrupt.deadline} />
-          : <WaitingCard text={`${target?.name} e' stato bersaglio di un'eliminazione e ha pochi secondi per decidere come rispondere&hellip;`} />}
+          : <WaitingCard text={`${target?.name} e' stato bersaglio di un'eliminazione e ha pochi secondi per decidere come rispondere…`} />}
         <HoldToPeekCharacter player={me} />
         <LogPanel log={state.log} />
       </div>
@@ -418,9 +484,10 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
   if (state.pendingReaction) {
     return (
       <div>
+        <TargetNoticeToast notice={visibleNotice} onDismiss={() => setVisibleNotice(null)} />
         {state.pendingReaction.actionableByMe
           ? <MyReactionResponse state={state} me={me} act={act} deadline={state.pendingReaction.deadline} />
-          : <WaitingCard text="Qualcuno ha pochi secondi per decidere se ridirigere l'ultimo effetto&hellip;" />}
+          : <WaitingCard text="Qualcuno ha pochi secondi per decidere se ridirigere l'ultimo effetto…" />}
         <HoldToPeekCharacter player={me} />
         <LogPanel log={state.log} />
       </div>
@@ -431,31 +498,43 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
   if (state.phase === 'phase1-reveal') {
     content = <MyPhase1Info state={state} act={act} />
   } else if (state.phase === 'phase2-instant') {
-    content = state.pendingInstantPlayerId === state.myId
-      ? <MyInstantCard me={me} act={act} others={state.players.filter(p => p.id !== me.id)} />
-      : <WaitingCard text={`${nameOf(state, state.pendingInstantPlayerId)} sta risolvendo una carta istantanea&hellip;`} />
+    const isMyTurn = state.pendingInstantPlayerId === state.myId
+    content = (
+      <div>
+        <MyHandCard me={me} />
+        {isMyTurn
+          ? <MyInstantCard me={me} act={act} others={state.players.filter(p => p.id !== me.id)} />
+          : <WaitingCard text={`${nameOf(state, state.pendingInstantPlayerId)} sta risolvendo una carta istantanea…`} />}
+      </div>
+    )
   } else if (state.phase === 'phase2-voluntary') {
-    content = state.pendingVoluntaryPlayerId === state.myId
-      ? <MyVoluntaryCard me={me} act={act} allPlayers={state.players} />
-      : <WaitingCard text={`${nameOf(state, state.pendingVoluntaryPlayerId)} sta decidendo la propria carta&hellip;`} />
+    const isMyTurn = state.pendingVoluntaryPlayerId === state.myId
+    content = (
+      <div>
+        <MyHandCard me={me} />
+        {isMyTurn
+          ? <MyVoluntaryCard me={me} act={act} allPlayers={state.players} />
+          : <WaitingCard text={`${nameOf(state, state.pendingVoluntaryPlayerId)} sta decidendo la propria carta…`} />}
+      </div>
+    )
   } else if (state.phase === 'phase3-select') {
     content = state.durindanaHolderId === state.myId
       ? <MyParticipantSelect state={state} act={act} />
-      : <WaitingCard text={`${nameOf(state, state.durindanaHolderId)} (Durindana) sta scegliendo i partecipanti alla battaglia&hellip;`} />
+      : <WaitingCard text={`${nameOf(state, state.durindanaHolderId)} (Durindana) sta scegliendo i partecipanti alla battaglia…`} />
   } else if (state.phase === 'phase3-ghost-block') {
     content = me.isGhost && state.pendingGhostBlocks.includes(state.myId)
       ? <MyGhostBlock state={state} act={act} />
-      : <WaitingCard text="Un fantasma sta decidendo se bloccare un partecipante&hellip;" />
+      : <WaitingCard text="Un fantasma sta decidendo se bloccare un partecipante…" />
   } else if (state.phase === 'phase3-reveal') {
     const allDone = state.battleRevealProgress && state.battleRevealProgress.done === state.battleRevealProgress.total
     if (allDone) {
       content = <div className="card" style={{ textAlign: 'center' }}><div className="eyebrow">Tutti hanno scelto</div><h2>L'Ariosto calcola il risultato&hellip;</h2></div>
-    } else if (state.pendingRevealPlayerId === state.myId) {
+    } else if (state.canRevealFavor) {
       content = <MyBattleReveal me={me} act={act} allPlayers={state.players} participantIds={state.battle.participants} />
     } else if (state.battle.participants.includes(state.myId)) {
-      content = <WaitingCard text={`In attesa che gli altri partecipanti mostrino il proprio favore (${state.battleRevealProgress.done}/${state.battleRevealProgress.total})&hellip;`} />
+      content = <WaitingCard text={`In attesa che gli altri partecipanti mostrino il proprio favore…`} />
     } else {
-      content = <WaitingCard text={`Battaglia in corso tra ${state.battle.participants.length} cavalieri (${state.battleRevealProgress.done}/${state.battleRevealProgress.total} hanno gia' mostrato il favore)&hellip;`} />
+      content = <WaitingCard text={`Battaglia in corso, in attesa che i partecipanti mostrino il favore…`} />
     }
   } else if (state.phase === 'phase4') {
     content = <ResultScreen state={state} act={act} secretInfo={secretInfo} clearSecretInfo={clearSecretInfo} />
@@ -463,6 +542,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
 
   return (
     <div>
+      <TargetNoticeToast notice={visibleNotice} onDismiss={() => setVisibleNotice(null)} />
       {content}
       <PhaseRulesButton phaseKey={transitionKey} />
       <HoldToPeekCharacter player={me} />
@@ -482,12 +562,36 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink })
           messages={state.councilMessages}
           readyIds={state.councilReady}
           myId={state.myId}
-          totalPlayers={state.players.length}
+          players={state.players}
           onSend={text => act('addCouncilMessage', { text })}
           onSetReady={ready => act('setCouncilReady', { ready })}
         />
       )}
       <LogPanel log={state.log} />
+    </div>
+  )
+}
+
+// Mostra sempre la propria carta in mano durante la Fase 2 (istantanee e volontarie),
+// indipendentemente da chi sta giocando in questo momento: cosi' tutti i giocatori la vedono
+// nello stesso istante in cui viene distribuita, non solo quando arriva il proprio turno.
+function MyHandCard({ me }) {
+  if (!me?.hand) {
+    return (
+      <div className="card">
+        <div className="eyebrow">La tua carta equipaggiamento</div>
+        <p>Non hai nessuna carta in mano questo round.</p>
+      </div>
+    )
+  }
+  const card = EQUIPMENT_BY_ID[me.hand]
+  if (!card) return null
+  return (
+    <div className="card">
+      <div className="eyebrow">La tua carta equipaggiamento</div>
+      {EQUIPMENT_IMAGES[card.id] && <img className="card-art" src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
+      <h2>{card.name}</h2>
+      <p>{card.description}</p>
     </div>
   )
 }
@@ -501,11 +605,7 @@ function MyInstantCard({ me, act, others }) {
 
   return (
     <div className="card">
-      <div className="eyebrow">La tua carta istantanea</div>
-      {EQUIPMENT_IMAGES[card.id] && <img className="card-art" src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
-      <h2>{card.name}</h2>
-      <p>{card.description}</p>
-
+      <div className="eyebrow">Tocca a te</div>
       {needsOneTarget && (
         <div className="player-list">
           <div className="eyebrow">Scegli un giocatore</div>
@@ -557,11 +657,7 @@ function MyVoluntaryCard({ me, act, allPlayers }) {
 
   return (
     <div className="card">
-      <div className="eyebrow">La tua carta equipaggiamento</div>
-      {EQUIPMENT_IMAGES[card.id] && <img className="card-art" src={EQUIPMENT_IMAGES[card.id]} alt={card.name} />}
-      <h2>{card.name}</h2>
-      <p>{card.description}</p>
-
+      <div className="eyebrow">Tocca a te</div>
       {!isPlayable && (
         <p style={{ color: 'var(--ink-soft)' }}>
           {card.timing === 'battle' && 'Questa carta si attiva solo se parteciperai alla battaglia: la mostrerai in Fase 3.'}
@@ -722,7 +818,7 @@ function MyInterruptResponse({ me, act, deadline }) {
       <div className="eyebrow">Sei stato bersaglio di un'eliminazione dalla battaglia</div>
       {secondsLeft !== null && (
         <p style={{ fontWeight: 'bold', color: timeUp ? 'var(--ink-soft)' : 'inherit' }}>
-          {timeUp ? 'Tempo scaduto: in attesa che la partita prosegua&hellip;' : `Hai ${secondsLeft} second${secondsLeft === 1 ? 'o' : 'i'} per decidere.`}
+          {timeUp ? 'Tempo scaduto: in attesa che la partita prosegua…' : `Hai ${secondsLeft} second${secondsLeft === 1 ? 'o' : 'i'} per decidere.`}
         </p>
       )}
       {hasInterruptCard ? (
@@ -766,7 +862,7 @@ function MyReactionResponse({ state, me, act, deadline }) {
       <div className="eyebrow">{needsTarget ? "Puoi ridirigere l'ultimo effetto" : "Puoi annullare l'ultimo effetto"}</div>
       {secondsLeft !== null && (
         <p style={{ fontWeight: 'bold', color: timeUp ? 'var(--ink-soft)' : 'inherit' }}>
-          {timeUp ? 'Tempo scaduto: in attesa che la partita prosegua&hellip;' : `Hai ${secondsLeft} second${secondsLeft === 1 ? 'o' : 'i'} per decidere.`}
+          {timeUp ? 'Tempo scaduto: in attesa che la partita prosegua…' : `Hai ${secondsLeft} second${secondsLeft === 1 ? 'o' : 'i'} per decidere.`}
         </p>
       )}
       <h2>Vuoi attivare {card?.name}?</h2>
@@ -866,7 +962,7 @@ function ResultScreen({ state, act, secretInfo, clearSecretInfo }) {
     return <FendenteMortalePicker state={state} act={act} />
   }
   if (pending && !pending.actionableByMe) {
-    return <WaitingCard text="Il possessore di Durindana (o chi cerca il proprio amore) sta usando un potere segreto sul tabellone&hellip;" />
+    return <WaitingCard text="Il possessore di Durindana (o chi cerca il proprio amore) sta usando un potere segreto sul tabellone…" />
   }
 
   const result = state.battle.result

@@ -6,6 +6,17 @@
 import { CHARACTERS_ALL, getRosterForPlayerCount, getBoardTrack } from './characters.js'
 import { EQUIPMENT_BY_ID, buildEquipmentDeck } from './equipment.js'
 
+// Registra che una carta e' stata giocata da attackerId contro targetId: la UI online la usa
+// per mostrare al bersaglio un avviso dedicato ("X ha usato Y contro di te"), con l'immagine
+// della carta. Non tocchiamo il possessore del Palazzo di Atlante (resta sempre segreto):
+// questa funzione va chiamata solo per carte giocate apertamente, mai per ridirezioni.
+function pushTargetNotice(state, targetId, attackerId, cardId) {
+  if (!targetId || !cardId) return
+  state.targetNotices = state.targetNotices || {}
+  state.noticeSeq = (state.noticeSeq || 0) + 1
+  state.targetNotices[targetId] = { attackerId: attackerId || null, cardId, seq: state.noticeSeq }
+}
+
 function shuffle(arr) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -326,6 +337,8 @@ export function resolveInstantCard(state, playerId, targets = {}) {
         if (!aCardIsInstant && !bCardIsInstant) {
           ;[a.hand, b.hand] = [b.hand, a.hand]
           state.log.push(`${a.name} e ${b.name} si scambiano l'equipaggiamento.`)
+          pushTargetNotice(state, a.id, player.id, card.id)
+          pushTargetNotice(state, b.id, player.id, card.id)
         } else {
           state.log.push(`Scambio non valido: una delle due carte e' istantanea.`)
         }
@@ -336,6 +349,7 @@ export function resolveInstantCard(state, playerId, targets = {}) {
       const t = getPlayer(state, targets.targetId)
       if (t && t.hand) {
         state.log.push(`${t.name} e' costretto a rivelare e usare la propria carta.`)
+        pushTargetNotice(state, t.id, player.id, card.id)
         // La UI dovra' poi far risolvere subito la carta forzata di t, se volontaria.
       }
       break
@@ -418,6 +432,7 @@ export function playVoluntaryCard(state, playerId, targets = {}) {
     case 'eliminate_adjacent':
     case 'eliminate_draw_on_success': {
       const targetId = targets.targetId
+      pushTargetNotice(state, targetId, player.id, card.id)
       attemptElimination(state, {
         attackerId: player.id,
         targetId,
@@ -451,6 +466,7 @@ export function playVoluntaryCard(state, playerId, targets = {}) {
         player.extraQueue = [...(player.extraQueue || []), stolenCard]
         t.hand = null
         state.lastEffect = { effect: 'steal_equipment', playerId, targetId: t.id, stolenCard }
+        pushTargetNotice(state, t.id, player.id, card.id)
       }
       break
     }

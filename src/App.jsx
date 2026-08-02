@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import LocalHotseatApp from './LocalHotseatApp.jsx'
 import OnlineApp from './OnlineApp.jsx'
+import TutorialApp from './TutorialApp.jsx'
 import { BACKGROUND_IMAGES } from './assets/index.js'
 
 export default function App() {
-  const [mode, setMode] = useState(null) // null | 'hotseat' | 'online'
+  const [mode, setMode] = useState(null) // null | 'hotseat' | 'online' | 'tutorial'
 
   useEffect(() => {
     if (BACKGROUND_IMAGES.battaglia) {
@@ -16,7 +17,9 @@ export default function App() {
   if (mode === 'hotseat') {
     content = <LocalHotseatApp />
   } else if (mode === 'online') {
-    content = <div className="app-shell"><OnlineApp /></div>
+    content = <div className="app-shell"><OnlineApp onExitToMenu={() => setMode(null)} /></div>
+  } else if (mode === 'tutorial') {
+    content = <div className="app-shell"><TutorialApp onExit={() => setMode(null)} /></div>
   } else {
     content = (
       <div className="app-shell">
@@ -25,8 +28,12 @@ export default function App() {
           <h1>Come volete giocare?</h1>
           <button onClick={() => setMode('hotseat')}>Hotseat locale (un solo dispositivo)</button>
           <button className="secondary" onClick={() => setMode('online')}>Online (un dispositivo a testa)</button>
+          <button className="secondary" onClick={() => setMode('tutorial')}>Tutorial guidato (impara giocando)</button>
           <p style={{ color: 'var(--ink-soft)', fontSize: '0.85em', marginTop: 14 }}>
-            Per la modalita' online serve che il server (<code>npm run server</code>) sia acceso su un PC della rete locale.
+            Liberamente ispirato all'<em>Orlando Furioso</em>: sotto le mura di Parigi, Cristiani e Saraceni si fronteggiano mentre Durindana passa di mano in mano.
+            Ogni cavaliere veste in segreto i panni di un personaggio del poema, fedele a una delle due fazioni &mdash; o a nessuna, come Isabella, il cui unico
+            amore e' Zerbino. Tra inganni, alleanze sussurrate e colpi di scena, solo l'astuzia e la fortuna decideranno quale fazione trionfera' negli scontri,
+            e chi restera' fedele solo a se stesso fino alla fine.
           </p>
         </div>
       </div>

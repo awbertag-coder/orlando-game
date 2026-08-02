@@ -83,25 +83,29 @@ export function PhaseTransition({ phaseKey, onContinue }) {
   if (!meta) return null
   const image = PHASE_IMAGES[meta.image]
   return (
-    <div className="phase-transition-stage">
-      {image && <img className="phase-transition-bg" src={image} alt={meta.title} />}
-      <div className="phase-transition-overlay" />
-      <div className="phase-transition-caption">
-        <div className="eyebrow">{meta.eyebrow}</div>
-        <div className="phase-transition-title">{meta.title}</div>
+    <div>
+      <div className="phase-transition-stage">
+        {image && <img className="phase-transition-bg" src={image} alt={meta.title} />}
+        <div className="phase-transition-overlay" />
+        <div className="phase-transition-caption">
+          <div className="eyebrow">{meta.eyebrow}</div>
+          <div className="phase-transition-title">{meta.title}</div>
+        </div>
       </div>
-      {meta.audio && (
-        <button
-          type="button"
-          className="phase-transition-btn phase-transition-btn-secondary"
-          onClick={() => playPhaseAudio(meta.audio)}
-        >
-          &#128266; Ascolta
+      <div className="phase-transition-actions">
+        {meta.audio && (
+          <button
+            type="button"
+            className="phase-transition-btn phase-transition-btn-secondary"
+            onClick={() => playPhaseAudio(meta.audio)}
+          >
+            &#128266; Ascolta
+          </button>
+        )}
+        <button type="button" className="phase-transition-btn phase-transition-btn-main" onClick={onContinue}>
+          Continua &#9654;
         </button>
-      )}
-      <button type="button" className="phase-transition-btn phase-transition-btn-main" onClick={onContinue}>
-        Continua &#9654;
-      </button>
+      </div>
     </div>
   )
 }

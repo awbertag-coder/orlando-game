@@ -132,7 +132,7 @@ function clearInterruptTimeout(room) {
   }
 }
 
-const REACTION_TIMEOUT_MS = 5000
+const REACTION_TIMEOUT_MS = 10000
 
 // Stesso trattamento a tempo dell'interruzione, ma per la finestra reattiva del Palazzo di
 // Atlante (che puo' aprirsi anche in seguito a un'interruzione rifiutata, non solo subito).
@@ -312,8 +312,9 @@ io.on('connection', (socket) => {
         }
         case 'revealParticipant': {
           if (state.phase !== 'phase3-reveal') return
-          const remaining = state.battle.participants.filter(id => !state.battle.reveals[id])
-          if (remaining[0] !== myId) return
+          // Tutti i partecipanti possono rivelare il favore contemporaneamente (non piu' uno
+          // alla volta in ordine di turno): basta essere in battaglia e non aver gia' rivelato.
+          if (!state.battle.participants.includes(myId) || state.battle.reveals[myId]) return
           engine.revealParticipant(state, myId, payload.faction, payload)
           if (state.battle.participants.every(id => state.battle.reveals[id])) {
             setTimeout(() => {
@@ -378,6 +379,21 @@ io.on('connection', (socket) => {
     room.voiceLink = trimmed || null
     broadcastLobby(roomCode)
     if (room.game) broadcastState(roomCode)
+  })
+
+  // Chiude definitivamente la stanza (solo a partita conclusa): usata dal pulsante
+  // "Chiudi partita" nella schermata finale. Notifica tutti i client collegati (giocatori
+  // e supervisori) cosi' tornano automaticamente alla schermata di selezione modalita'.
+  socket.on('closeRoom', () => {
+    const roomCode = socket.data.roomCode
+    if (!roomCode || !rooms[roomCode]) return
+    const room = rooms[roomCode]
+    if (!room.game || room.game.phase !== 'gameover') return
+    clearInterruptTimeout(room)
+    clearReactionTimeout(room)
+    io.to(roomCode).emit('roomClosed')
+    delete rooms[roomCode]
+    broadcastOpenRooms()
   })
 
   socket.on('leaveRoom', () => {

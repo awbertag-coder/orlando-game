@@ -89,11 +89,20 @@ export function redactForViewer(state, viewerId) {
       : null,
     councilMessages: state.councilMessages || [],
     councilReady: state.councilReady || [],
-    pendingRevealPlayerId: state.phase === 'phase3-reveal'
-      ? (state.battle.participants.find(id => !state.battle.reveals[id]) ?? null)
-      : null,
+    // Tutti i partecipanti che non hanno ancora rivelato possono farlo nello stesso momento
+    // (non piu' uno alla volta in ordine di turno): altrimenti l'ordine di attivazione
+    // rischiava di far intuire chi e' in battaglia.
+    canRevealFavor: state.phase === 'phase3-reveal' && state.battle.participants.includes(viewerId) && !state.battle.reveals[viewerId],
     battleRevealProgress: state.phase === 'phase3-reveal' || (state.phase === 'phase4' && state.battle.participants.length)
       ? { done: state.battle.participants.filter(id => state.battle.reveals[id]).length, total: state.battle.participants.length }
+      : null,
+    // Avviso "carta usata contro di te", una tantum (deduplicato lato client via seq).
+    targetNotice: (state.targetNotices && state.targetNotices[viewerId])
+      ? {
+          seq: state.targetNotices[viewerId].seq,
+          cardId: state.targetNotices[viewerId].cardId,
+          attackerName: state.players.find(p => p.id === state.targetNotices[viewerId].attackerId)?.name || null
+        }
       : null,
     // Solo il possessore di Durindana ha bisogno di sapere se puo' unirsi di nascosto
     canSecretlyJoin: viewerIsDurindana && state.phase === 'phase3-select' ? engine.canSecretlyJoin(state) : false,
