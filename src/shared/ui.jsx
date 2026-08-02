@@ -164,7 +164,10 @@ export function IdentityBadge({ player }) {
 
 // Pulsante "tieni premuto": mostra le info segrete del proprio personaggio
 // solo finche' il dito/mouse resta premuto, per non doversele ricordare a memoria.
-export function HoldToPeekCharacter({ player }) {
+// onDark: true quando il pulsante sta direttamente sullo sfondo scuro della pagina (online),
+// false quando sta dentro un riquadro chiaro (hotseat) -- il colore del testo di default
+// (scuro) resta corretto li', quindi va cambiato solo nel primo caso.
+export function HoldToPeekCharacter({ player, onDark = false }) {
   const [peeking, setPeeking] = useState(false)
   const show = (e) => { e.preventDefault(); setPeeking(true) }
   const hide = () => setPeeking(false)
@@ -173,7 +176,10 @@ export function HoldToPeekCharacter({ player }) {
     <div style={{ marginTop: 16 }}>
       <button
         className="secondary"
-        style={{ touchAction: 'none', userSelect: 'none' }}
+        style={{
+          touchAction: 'none', userSelect: 'none',
+          ...(onDark ? { color: '#fff', borderColor: 'rgba(255,255,255,0.7)' } : {})
+        }}
         onPointerDown={show}
         onPointerUp={hide}
         onPointerLeave={hide}

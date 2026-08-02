@@ -786,7 +786,9 @@ export default function LocalHotseatApp() {
           const g = engine.createGame(names, {
             ...options,
             maxPlayers: 10,
-            excludeCardIds: ['anello_di_angelica', 'palazzo_di_atlante']
+            // Brunello il ladro annulla solo l'Anello di Angelica, che in hotseat non c'e'
+            // gia': senza il Ring da annullare sarebbe una carta morta, quindi via anche lui.
+            excludeCardIds: ['anello_di_angelica', 'palazzo_di_atlante', 'brunello_il_ladro']
           })
           setGame(g)
           setStage('roles')

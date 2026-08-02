@@ -389,6 +389,17 @@ function nameOf(state, id) {
   return state.players.find(p => p.id === id)?.name || '?'
 }
 
+// Quando tutti hanno gia' deciso la propria carta ma qualcuno non ha ancora premuto "sono
+// pronto" nel Consiglio: prima mostrava "? sta decidendo la propria carta…" (pendingVoluntaryPlayerId
+// diventa null a quel punto, e il messaggio non aveva piu' senso). Un giocatore senza carta in
+// mano (es. gliel'hanno rubata) conta gia' come pronto da solo, quindi non va elencato qui.
+function waitingForReadyText(state) {
+  const notReady = state.players.filter(p => p.hand && !(state.councilReady || []).includes(p.id))
+  if (notReady.length === 0) return 'In attesa che la partita prosegua…'
+  if (notReady.length === 1) return `${notReady[0].name} non ha ancora confermato di essere pronto.`
+  return `${notReady.map(p => p.name).join(', ')} non hanno ancora confermato di essere pronti.`
+}
+
 
 
 
@@ -473,7 +484,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, o
         {state.pendingInterrupt.actionableByMe
           ? <MyInterruptResponse me={me} act={act} deadline={state.pendingInterrupt.deadline} />
           : <WaitingCard text={`${target?.name} e' stato bersaglio di un'eliminazione e ha pochi secondi per decidere come rispondere…`} />}
-        <HoldToPeekCharacter player={me} />
+        <HoldToPeekCharacter player={me} onDark />
         <LogPanel log={state.log} />
       </div>
     )
@@ -488,7 +499,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, o
         {state.pendingReaction.actionableByMe
           ? <MyReactionResponse state={state} me={me} act={act} deadline={state.pendingReaction.deadline} />
           : <WaitingCard text="Qualcuno ha pochi secondi per decidere se ridirigere l'ultimo effetto…" />}
-        <HoldToPeekCharacter player={me} />
+        <HoldToPeekCharacter player={me} onDark />
         <LogPanel log={state.log} />
       </div>
     )
@@ -514,7 +525,9 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, o
         <MyHandCard me={me} />
         {isMyTurn
           ? <MyVoluntaryCard me={me} act={act} allPlayers={state.players} />
-          : <WaitingCard text={`${nameOf(state, state.pendingVoluntaryPlayerId)} sta decidendo la propria carta…`} />}
+          : state.pendingVoluntaryPlayerId
+            ? <WaitingCard text={`${nameOf(state, state.pendingVoluntaryPlayerId)} sta decidendo la propria carta…`} />
+            : <WaitingCard text={waitingForReadyText(state)} />}
       </div>
     )
   } else if (state.phase === 'phase3-select') {
@@ -545,7 +558,7 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, o
       <TargetNoticeToast notice={visibleNotice} onDismiss={() => setVisibleNotice(null)} />
       {content}
       <PhaseRulesButton phaseKey={transitionKey} />
-      <HoldToPeekCharacter player={me} />
+      <HoldToPeekCharacter player={me} onDark />
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: '#fff' }}>
         <input type="checkbox" checked={showTable} onChange={e => setShowTable(e.target.checked)} />
         Mostra tavolo e sospetti
