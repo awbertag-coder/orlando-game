@@ -851,11 +851,11 @@ export default function LocalHotseatApp() {
       {content}
       <PhaseRulesButton phaseKey={transitionKey} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '14px 0' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: '#fff' }}>
           <input type="checkbox" checked={showTable} onChange={e => setShowTable(e.target.checked)} />
           Mostra tavolo e sospetti (privato per ciascun giocatore, dentro il proprio turno)
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: '#fff' }}>
           <input type="checkbox" checked={showSupervisor} onChange={e => {
             if (e.target.checked) {
               const pw = window.prompt('Password amministratore:')
@@ -868,7 +868,7 @@ export default function LocalHotseatApp() {
           }} />
           Modalita' supervisore (vedi tutto, per test) &mdash; richiede password amministratore
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: 'var(--ink-soft)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85em', color: '#fff' }}>
           <input type="checkbox" checked={showBoard} onChange={e => setShowBoard(e.target.checked)} />
           Mostra tabellone e poteri sui tracciati
         </label>

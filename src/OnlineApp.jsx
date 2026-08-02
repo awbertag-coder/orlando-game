@@ -546,11 +546,11 @@ function GameScreen({ state, act, secretInfo, clearSecretInfo, onSetVoiceLink, o
       {content}
       <PhaseRulesButton phaseKey={transitionKey} />
       <HoldToPeekCharacter player={me} />
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: 'var(--ink-soft)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: '#fff' }}>
         <input type="checkbox" checked={showTable} onChange={e => setShowTable(e.target.checked)} />
         Mostra tavolo e sospetti
       </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: 'var(--ink-soft)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: '0.85em', color: '#fff' }}>
         <input type="checkbox" checked={showBoard} onChange={e => setShowBoard(e.target.checked)} />
         Mostra tabellone e poteri sui tracciati
       </label>

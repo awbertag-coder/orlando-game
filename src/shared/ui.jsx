@@ -120,7 +120,12 @@ export function PhaseRulesButton({ phaseKey }) {
   if (!meta) return null
   return (
     <div style={{ margin: '10px 0' }}>
-      <button type="button" className="secondary" onClick={() => setOpen(o => !o)}>
+      <button
+        type="button"
+        className="secondary"
+        style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.7)' }}
+        onClick={() => setOpen(o => !o)}
+      >
         &#128214; {open ? 'Nascondi regole' : 'Regole di questa fase'}
       </button>
       {open && (

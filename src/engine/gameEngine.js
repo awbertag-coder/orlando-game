@@ -3,7 +3,7 @@
 // che in futuro questo stesso file venga importato tale e quale dentro un server
 // Socket.io, quindi non deve mai leggere input utente direttamente (quello lo fa la UI).
 
-import { CHARACTERS_ALL, getRosterForPlayerCount, getBoardTrack } from './characters.js'
+import { CHARACTERS_ALL, getRosterForPlayerCount, getBoardTrack, fillGanoMarfisaDescription } from './characters.js'
 import { EQUIPMENT_BY_ID, buildEquipmentDeck } from './equipment.js'
 
 // Registra che una carta e' stata giocata da attackerId contro targetId: la UI online la usa
@@ -37,17 +37,26 @@ export function createGame(playerNames, options = {}) {
   if (n > maxPlayers) {
     throw new Error(`Con questa modalita\' si possono avere al massimo ${maxPlayers} giocatori`)
   }
+  // Soglia oltre la quale Gano/Marfisa cambiano fazione: dipende dal tabellone in uso.
+  // Tabellone 6-8 (4 caselle, partite piu' corte): turno 6. Tabellone 9+ (5 caselle,
+  // invariato): turno 7, come da regolamento originale. Sovrascrivibile via options
+  // (usato dallo script di simulazione per confrontare soglie diverse).
+  const ganoMarfisaSwitchRound = options.ganoMarfisaSwitchRound || (n < 9 ? 6 : 7)
+
   const charIds = shuffle(getRosterForPlayerCount(n))
   const players = playerNames.map((name, i) => {
     const char = CHARACTERS_ALL[charIds[i]]
     // Isabella non appartiene a nessuna delle due fazioni (resta sempre neutrale).
     const faction = char.faction
+    const description = char.isTraitor
+      ? fillGanoMarfisaDescription(char.description || '', ganoMarfisaSwitchRound)
+      : (char.description || '')
     return {
       id: `p${i}`,
       name,
       characterId: char.id,
       characterName: char.name,
-      description: char.description || '',
+      description,
       faction,
       favorTiles: char.favorTiles,
       hasDurindana: false,
@@ -82,10 +91,16 @@ export function createGame(playerNames, options = {}) {
     needsPhase1: n >= 8,
     deck: shuffle(buildEquipmentDeck(excludeCardIds)),
     discard: [],
-    board: { cristiana: 0, saracena: 0 },
+    // Tabellone 6-8 giocatori: si parte gia' con una casella occupata a testa, cosi' servono
+    // 4 vittorie reali invece di 5 (stesso effetto di un tracciato piu' corto) SENZA dover
+    // toccare la grafica del tabellone, che ha sempre 5 caselle disegnate. Il tabellone 9+
+    // resta com'era, si parte da zero.
+    board: n < 9 ? { cristiana: 1, saracena: 1 } : { cristiana: 0, saracena: 0 },
     boardTrack: getBoardTrack(n),
     round: 1,
     ganoMarfisaSwitched: false,
+    // Turno oltre il quale Gano/Marfisa cambiano fazione: dipende dal tabellone (vedi sopra).
+    ganoMarfisaSwitchRound,
     phase1Acked: [],
     pendingInterrupt: null,
     pendingReaction: null, // Palazzo di Atlante: offerta reattiva a ridirigere l'ultimo effetto
@@ -963,7 +978,7 @@ export function endRound(state) {
 
   // Gano/Marfisa: se la partita non si e' conclusa entro il 7 turno, cambiano
   // fazione automaticamente e silenziosamente (una sola volta).
-  if (state.round > 7 && !state.ganoMarfisaSwitched) {
+  if (state.round > state.ganoMarfisaSwitchRound && !state.ganoMarfisaSwitched) {
     for (const p of state.players) {
       if (p.isTraitor) p.faction = p.faction === 'cristiana' ? 'saracena' : 'cristiana'
     }

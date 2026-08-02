@@ -42,12 +42,12 @@ export const CHARACTERS_ALL = {
   },
   gano: {
     id: 'gano', name: 'Gano', faction: 'cristiana', isTraitor: true,
-    description: `Se la partita non si e' conclusa entro il settimo turno, la tua fazione diventa saracena.`,
+    description: `Se la partita non si e' conclusa entro il {{turno}} turno, la tua fazione diventa saracena.`,
     favorTiles: [{ faction: 'cristiana', value: 1 }, { faction: 'saracena', value: 1 }]
   },
   marfisa: {
     id: 'marfisa', name: 'Marfisa', faction: 'saracena', isTraitor: true,
-    description: `Se la partita non si e' conclusa entro il settimo turno, la tua fazione diventa cristiana.`,
+    description: `Se la partita non si e' conclusa entro il {{turno}} turno, la tua fazione diventa cristiana.`,
     favorTiles: [{ faction: 'cristiana', value: 1 }, { faction: 'saracena', value: 1 }]
   },
   rinaldo: {
@@ -97,6 +97,19 @@ const CHARACTER_PAIRS = [
 // Dato un numero di giocatori, restituisce l'elenco di id-personaggio da usare.
 // Segue la tabella del regolamento; dove e' prevista scelta libera/casuale, sceglie a caso
 // mantenendo sempre intere le coppie speculari (mai un personaggio senza il suo opposto).
+// Usato per riempire il segnaposto {{turno}} nella descrizione di Gano/Marfisa: la soglia
+// oltre la quale cambiano fazione dipende dal tabellone in uso (vedi getGanoMarfisaSwitchRound
+// in gameEngine.js), quindi il numero esatto non puo' essere scritto fisso nella scheda.
+const ORDINALI_IT = {
+  1: 'primo', 2: 'secondo', 3: 'terzo', 4: 'quarto', 5: 'quinto',
+  6: 'sesto', 7: 'settimo', 8: 'ottavo', 9: 'nono', 10: 'decimo'
+}
+
+export function fillGanoMarfisaDescription(description, switchRound) {
+  const ordinale = ORDINALI_IT[switchRound] || `${switchRound}\u00b0`
+  return description.replace('{{turno}}', ordinale)
+}
+
 export function getRosterForPlayerCount(n) {
   const base = ['orlando', 'agramante', 'angelica', 'ruggero', 'bradamante', 'medoro']
   if (n === 6) return [...base]
