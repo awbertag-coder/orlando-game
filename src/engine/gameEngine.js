@@ -194,15 +194,15 @@ function attemptElimination(state, { attackerId = null, targetId, field, drawCar
     state.log.push(`${target.name} e' immune (Atlante): l'eliminazione non ha effetto.`)
     return
   }
-  // Atlante si rivela automaticamente (e in modo permanente) la prima volta che il
-  // possessore viene bersagliato da un effetto negativo. Non serve altra guardia:
-  // una volta scattato, immuneAll=true e il controllo sopra intercetta tutto il resto.
+  // Atlante si rivela automaticamente la prima volta che il possessore viene bersagliato da
+  // un effetto negativo, e lo protegge per tutto il resto di QUESTO turno (si azzera al
+  // prossimo, vedi resetRoundFlags: la carta comunque torna al mazzo come tutte le altre).
   if (target.hand === 'atlante') {
     target.revealedThisRound.push('atlante')
     target.handPublic = true
     target.immuneAll = true
     setCouncilReady(state, target.id, true)
-    state.log.push(`${target.name} rivela Atlante: e' immune da qualsiasi effetto, anche in futuro.`)
+    state.log.push(`${target.name} rivela Atlante: e' immune da qualsiasi effetto per il resto di questo turno.`)
     return
   }
   const handCard = target.hand ? EQUIPMENT_BY_ID[target.hand] : null
@@ -285,6 +285,9 @@ function resetRoundFlags(state) {
     player.forcedOut = false
     player.eliminatedFromBattle = false
     player.orriloImmune = false
+    // Atlante protegge solo per il resto del turno in cui si rivela: a inizio turno nuovo
+    // l'immunita' si azzera (la carta stessa torna comunque al mazzo come tutte le altre).
+    player.immuneAll = false
   }
   state.participantsDelta = 0
   state.councilMessages = []
@@ -356,6 +359,10 @@ export function resolveInstantCard(state, playerId, targets = {}) {
       const a = getPlayer(state, targets.targetId)
       const b = getPlayer(state, targets.targetId2)
       if (a && b && a.id !== b.id) {
+        if (a.immuneAll || b.immuneAll) {
+          state.log.push(`Scambio senza effetto: ${a.immuneAll ? a.name : b.name} e' immune (Atlante).`)
+          break
+        }
         const aCardIsInstant = EQUIPMENT_BY_ID[a.hand]?.timing === 'instant'
         const bCardIsInstant = EQUIPMENT_BY_ID[b.hand]?.timing === 'instant'
         if (!aCardIsInstant && !bCardIsInstant) {
@@ -371,6 +378,10 @@ export function resolveInstantCard(state, playerId, targets = {}) {
     }
     case 'force_reveal_use': {
       const t = getPlayer(state, targets.targetId)
+      if (t && t.immuneAll) {
+        state.log.push(`${t.name} e' immune (Atlante): non e' costretto a rivelare nulla.`)
+        break
+      }
       if (t && t.hand) {
         state.log.push(`${t.name} e' costretto a rivelare e usare la propria carta.`)
         pushTargetNotice(state, t.id, player.id, card.id)
@@ -494,6 +505,10 @@ export function playVoluntaryCard(state, playerId, targets = {}) {
     }
     case 'steal_equipment': {
       const t = getPlayer(state, targets.targetId)
+      if (t && t.immuneAll) {
+        state.log.push(`${t.name} e' immune (Atlante): il furto non ha effetto.`)
+        break
+      }
       if (t && t.hand && !t.revealedThisRound.includes(t.hand)) {
         const stolenCard = t.hand
         player.extraQueue = [...(player.extraQueue || []), stolenCard]
@@ -941,7 +956,7 @@ export function cercareAmoreInfo(state) {
 export function resolveCercareAmore(state, targetId) {
   const info = cercareAmoreInfo(state)
   const target = getPlayer(state, targetId)
-  const found = target && target.characterId === info.loverCharacter
+  const found = target && !target.immuneAll && target.characterId === info.loverCharacter
   if (found) {
     // Conversione: cambiano le tessere favore (mostrera' da ora l'altra fazione),
     // ma la sua fazione "vera" (per la vittoria) resta invariata.
@@ -957,6 +972,11 @@ export function resolveFendenteMortale(state, targetId) {
   const durindanaHolder = state.players.find(p => p.hasDurindana)
   const target = getPlayer(state, targetId)
   state.pendingBoardPowers.shift()
+
+  if (target.immuneAll) {
+    state.log.push(`Fendente Mortale non ha alcun effetto su ${target.name}: e' immune (Atlante).`)
+    return { outcome: 'immune' }
+  }
 
   if (target.characterId === 'orlando') {
     state.winner = 'saracena'; state.phase = 'gameover'

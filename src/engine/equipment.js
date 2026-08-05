@@ -102,7 +102,7 @@ export const EQUIPMENT = [
   // PASSIVA
   {
     id: 'atlante', name: 'Atlante', timing: 'passive', effect: 'immune_all',
-    description: 'Immune da ogni effetto di equipaggiamento e del tabellone. Si rivela solo se bersagliato.'
+    description: 'Immune da ogni effetto di equipaggiamento e del tabellone per il resto di questo turno. Si rivela solo se bersagliato.'
   },
 
   // INTERRUZIONE

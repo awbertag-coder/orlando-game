@@ -502,7 +502,7 @@ export default function TutorialApp({ onExit }) {
         <div className="card target-notice-toast">
           <div className="eyebrow">Sei stato bersagliato &mdash; ma sei immune</div>
           <p>Chiara ha usato di nuovo <strong>Spazzata</strong> contro di te. Questa volta pero' Atlante si rivela da
-            sola: sei immune per sempre da qualsiasi effetto negativo, non solo per questo round.</p>
+            sola: sei immune da qualsiasi effetto negativo per tutto il resto di questo turno.</p>
           <button onClick={next}>Avanti</button>
         </div>
       )
